@@ -214,30 +214,7 @@ def hflip(image, target):
     target = target.copy()
     if "human_boxes" in target:
         boxes = target["human_boxes"]
-        try:
-            boxes = boxes[:, [2, 1, 0, 3]] * torch.as_tensor([-1, 1, -1, 1]) + torch.as_tensor([w, 0, w, 0])
-        except:
-            print()
-            print('type(boxes):')
-            print(type(boxes))
-            print()
-            print('boxes.shape:')
-            print(boxes.shape)
-            print()
-            print("boxes:")
-            print(boxes)
-
-            print()
-            print('target.shape')
-            print(target.shape)
-
-            print()
-            print('target:')
-            print(target)
-
-            raise Exception('exception when doing hflip')
-
-
+        boxes = boxes[:, [2, 1, 0, 3]] * torch.as_tensor([-1, 1, -1, 1]) + torch.as_tensor([w, 0, w, 0])
         target["human_boxes"] = boxes
     if "object_boxes" in target:
         boxes = target["object_boxes"]
