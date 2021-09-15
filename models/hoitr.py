@@ -21,7 +21,7 @@ from .backbone import build_backbone
 from .hoi_matcher import build_matcher as build_hoi_matcher
 from .transformer import build_transformer
 
-
+# This will be modified by build() if train on 2.5vrd
 num_humans = 2
 
 
@@ -341,13 +341,18 @@ class MLP(nn.Module):
 
 
 def build(args):
-    assert args.dataset_file in ['hico', 'vcoco', 'hoia'], args.dataset_file
+    assert args.dataset_file in ['hico', 'vcoco', 'hoia', 'two_point_five_vrd'], args.dataset_file
     if args.dataset_file in ['hico']:
         num_classes = 91
         num_actions = 118
     elif args.dataset_file in ['vcoco']:
         num_classes = 91
         num_actions = 30
+    elif args.dataset_file in ['two_point_five_vrd']:
+        num_classes = 602
+        num_actions = 4
+        global num_humans
+        num_humans = num_classes - 1
     else:
         num_classes = 12
         num_actions = 11

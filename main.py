@@ -88,7 +88,7 @@ def get_args_parser():
                         help="Relative classification weight of the no-object class")
 
     # Dataset parameters.
-    parser.add_argument('--dataset_file', choices=['hico', 'vcoco', 'hoia'], required=True)
+    parser.add_argument('--dataset_file', choices=['hico', 'vcoco', 'hoia', 'two_point_five_vrd'], required=True)
 
     # Modify to your log path ******************************* !!!
     exp_time = datetime.datetime.now().strftime('%Y%m%d%H%M')
