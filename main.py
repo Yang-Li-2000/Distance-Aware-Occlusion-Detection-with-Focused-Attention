@@ -23,6 +23,8 @@ from datasets import build_dataset
 from engine import train_one_epoch
 from models import build_model
 
+from magic_numbers import *
+
 
 def create_log_dir(checkpoint='checkpoint', log_path='/data/LOG/train_log'):
     base_dir = os.path.join(log_path, getpass.getuser())
@@ -155,9 +157,18 @@ def main(args):
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
 
+    if TRAIN_ON_ONE_IMAGE:
+        args.batch_size = 1
+
+
+
     batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.batch_size, drop_last=True)
     data_loader_train = DataLoader(dataset_train, batch_sampler=batch_sampler_train,
                                    collate_fn=utils.collate_fn, num_workers=args.num_workers)
+
+    sequential_data_loader_train = DataLoader(dataset_train,
+                                              collate_fn=utils.collate_fn,
+                                              num_workers=args.num_workers)
 
     # Load from pretrained DETR model.
     assert args.num_queries == 100, args.num_queries
@@ -185,13 +196,20 @@ def main(args):
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
 
+
+    ############################################################################
+    if TRAIN_ON_ONE_IMAGE:
+        data_loader_train = sequential_data_loader_train
+    ############################################################################
+
+
     print("Start training")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             sampler_train.set_epoch(epoch)
         train_stats = train_one_epoch(
-            model, criterion, data_loader_train, optimizer, device, epoch,
+            args, model, criterion, data_loader_train, optimizer, device, epoch,
             args.clip_max_norm)
         lr_scheduler.step()
         if args.output_dir:

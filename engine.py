@@ -16,10 +16,36 @@ import torch
 
 import util.misc as utils
 
+from magic_numbers import *
+from process_model_outputs import *
 
-def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
+
+def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, max_norm: float = 0):
+    iteratoin_count = 0
+    max_num_iterations = len(data_loader)
+
+
+    ############################################################################
+    fixed_samples = None
+    fixed_targets = None
+    fixed_energy_list = list()
+    count = 0
+    stop_index = index_of_that_image
+
+    if TRAIN_ON_ONE_IMAGE:
+        for samples, targets in data_loader:
+            if count == stop_index:
+                fixed_samples = samples
+                fixed_targets = targets
+                break
+            else:
+                count += 1
+                continue
+    ############################################################################
+
+
     model.train()
     criterion.train()
 
@@ -30,6 +56,22 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
     print_freq = 10
 
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
+
+        ########################################################################
+        if TRAIN_ON_ONE_IMAGE:
+            samples = fixed_samples
+            targets = fixed_targets
+            print()
+            if iteratoin_count == 0:
+                print(targets[0]['image_id'])
+            print("targets:",
+                  targets[0]['human_labels'].cpu().numpy(),
+                  targets[0]['action_labels'].cpu().numpy(),
+                  targets[0]['object_labels'].cpu().numpy())
+        ########################################################################
+
+        original_targets = targets
+
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items() if k not in ['image_id']} for t in targets]
 
@@ -63,7 +105,56 @@ def train_one_epoch(model: torch.nn.Module, criterion: torch.nn.Module,
         metric_logger.update(loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled)
         metric_logger.update(class_error=loss_dict_reduced['class_error'])
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
+
+        ########################################################################
+        if TRAIN_ON_ONE_IMAGE:
+            # print('pred_human:')
+            # print(outputs['human_pred_logits'].argmax(1).unique())
+            # print()
+            #
+            # print('pred_object')
+            # outputs['object_pred_logits'].argmax(1).unique()
+            # print()
+            #
+            # print('distance relation:')
+            # print(outputs['action_pred_logits'].argmax(1).unique())
+            # print()
+            hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets)
+            if len(hoi_list) == 0:
+                print("empty hoi_list")
+            else:
+                try:
+                    for i in range(0, 5):
+                        print(hoi_list[0]['hoi_list'][i])
+                except:
+                    pass
+            print()
+        ########################################################################
+
+
+
+
+        # TODO: Compute Precision
+
+        iteratoin_count += 1
+
+
+
+
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+
+
+
+
+
+
+
+
+
+
+
+
+

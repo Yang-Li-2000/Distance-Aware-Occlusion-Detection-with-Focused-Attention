@@ -10,6 +10,7 @@ import torchvision.transforms as T
 import torchvision.transforms.functional as F
 from util.box_ops import box_xyxy_to_cxcywh
 from PIL import Image
+from magic_numbers import *
 
 import pandas as pd
 
@@ -67,6 +68,9 @@ def name_to_index(name):
     except:
         pass
     return index
+
+def index_to_name(index):
+    return class_descriptions_boxable.iloc[index][1]
 
 # TODO: process no majority
 distance_id_to_name = {
@@ -479,6 +483,9 @@ def build(image_set, test_scale=-1):
 
     if image_set == 'train':
         annotation_file = './data/2.5vrd/annotation_train_distances.odgt'
+        if USE_SMALL_ANNOTATION_FILE:
+            annotation_file = './data/2.5vrd/' + small_annotation_file
+
     elif image_set == 'valid':
         annotation_file = './data/2.5vrd/annotation_valid_distances.odgt'
     elif image_set == 'test':
