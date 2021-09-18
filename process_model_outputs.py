@@ -130,6 +130,7 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
             )
             hoi_list.append(pp)
 
+        # TODO: implement a new nms. The thresholds should be changed.
         hoi_list = triplet_nms(hoi_list)
         item = dict(image_id=image_id, hoi_list=hoi_list)
         final_hoi_result_list.append(item)

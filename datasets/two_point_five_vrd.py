@@ -106,11 +106,6 @@ occlusion_name_to_id = {
     'mutually occluded': 3
 }
 
-
-# TODO: modify this
-#hoi_interaction_names = json.loads(
-#    open('data/vcoco/vcoco_verb_names.json', 'r').readlines()[0])['verb_names']
-
 def convert_xywh2x1y1x2y2(box, shape, flip):
     ih, iw = shape[:2]
     x, y, w, h = box

@@ -58,7 +58,7 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
 
         ########################################################################
-        if TRAIN_ON_ONE_IMAGE:
+        if TRAIN_ON_ONE_IMAGE and DEBUG_OUTPUTS:
             samples = fixed_samples
             targets = fixed_targets
             print()
@@ -69,6 +69,34 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
                   targets[0]['action_labels'].cpu().numpy(),
                   targets[0]['object_labels'].cpu().numpy())
         ########################################################################
+
+
+
+        ########################################################################
+        # Print targets when USE_SMALL_ANNOTATION_FILE
+        if not TRAIN_ON_ONE_IMAGE and USE_SMALL_ANNOTATION_FILE and DEBUG_OUTPUTS:
+            print("Iteration: ", iteratoin_count)
+            print("targets:")
+
+            human_labels = targets[0]['human_labels'].cpu().numpy()
+            action_labels = targets[0]['action_labels'].cpu().numpy()
+            object_labels = targets[0]['object_labels'].cpu().numpy()
+
+            human_names = list()
+            action_names = list()
+            object_names = list()
+
+            for i in range(len(human_labels)):
+                human_names.append(index_to_name(human_labels[i]))
+                action_names.append(distance_id_to_name[action_labels[i]])
+                object_names.append(index_to_name(object_labels[i]))
+
+            print('Object A:', human_names)
+            print('relation:', action_names)
+            print('Object B:', object_names)
+
+        ########################################################################
+
 
         original_targets = targets
 
@@ -107,24 +135,13 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
         ########################################################################
-        if TRAIN_ON_ONE_IMAGE:
-            # print('pred_human:')
-            # print(outputs['human_pred_logits'].argmax(1).unique())
-            # print()
-            #
-            # print('pred_object')
-            # outputs['object_pred_logits'].argmax(1).unique()
-            # print()
-            #
-            # print('distance relation:')
-            # print(outputs['action_pred_logits'].argmax(1).unique())
-            # print()
+        if (TRAIN_ON_ONE_IMAGE or USE_SMALL_ANNOTATION_FILE) and DEBUG_OUTPUTS:
             hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets)
             if len(hoi_list) == 0:
                 print("empty hoi_list")
             else:
                 try:
-                    for i in range(0, 5):
+                    for i in range(0, 2):
                         print(hoi_list[0]['hoi_list'][i])
                 except:
                     pass

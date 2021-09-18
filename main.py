@@ -167,6 +167,7 @@ def main(args):
                                    collate_fn=utils.collate_fn, num_workers=args.num_workers)
 
     sequential_data_loader_train = DataLoader(dataset_train,
+                                              args.batch_size,
                                               collate_fn=utils.collate_fn,
                                               num_workers=args.num_workers)
 
@@ -198,7 +199,7 @@ def main(args):
 
 
     ############################################################################
-    if TRAIN_ON_ONE_IMAGE:
+    if USE_SEQUENTIAL_LOADER:
         data_loader_train = sequential_data_loader_train
     ############################################################################
 
