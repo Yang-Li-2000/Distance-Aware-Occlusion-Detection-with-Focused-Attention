@@ -20,7 +20,7 @@ from torch.utils.data import DataLoader, DistributedSampler
 
 import util.misc as utils
 from datasets import build_dataset
-from engine import train_one_epoch
+from engine import *
 from models import build_model
 
 from magic_numbers import *
@@ -151,11 +151,14 @@ def main(args):
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
     dataset_train = build_dataset(image_set='train', args=args)
+    dataset_valid = build_dataset(image_set='valid', args=args, test_scale=800)
 
     if args.distributed:
         sampler_train = DistributedSampler(dataset_train)
+        sampler_valid = DistributedSampler(dataset_valid)
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
+        sampler_valid = torch.utils.data.RandomSampler(dataset_valid)
 
     if TRAIN_ON_ONE_IMAGE:
         args.batch_size = 1
@@ -170,6 +173,14 @@ def main(args):
                                               args.batch_size,
                                               collate_fn=utils.collate_fn,
                                               num_workers=args.num_workers)
+    # Construct validation data loader
+    # TODO: Disable shuffle for validation and test sets
+    batch_sampler_valid = torch.utils.data.BatchSampler(sampler_valid, batch_size_validation, drop_last=False)
+    data_loader_valid = DataLoader(dataset_valid,
+                                   batch_sampler=batch_sampler_valid,
+                                   collate_fn=utils.collate_fn,
+                                   num_workers=num_workers_validation)
+
 
     # Load from pretrained DETR model.
     assert args.num_queries == 100, args.num_queries
@@ -209,10 +220,18 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             sampler_train.set_epoch(epoch)
+
+        # Train
         train_stats = train_one_epoch(
             args, model, criterion, data_loader_train, optimizer, device, epoch,
             args.clip_max_norm)
         lr_scheduler.step()
+
+        # Validate
+        with torch.no_grad():
+            validate(args, model, criterion, data_loader_valid, optimizer,
+                     device, epoch, args.clip_max_norm)
+
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             # extra checkpoint before LR drop and every 10 epochs

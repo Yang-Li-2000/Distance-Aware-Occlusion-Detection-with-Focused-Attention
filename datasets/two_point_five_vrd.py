@@ -204,6 +204,10 @@ def parse_one_gt_line(gt_line, scale=1):
     img_shape = item['height'], item['width']
     gt_boxes, ignored_boxes, total_boxes = get_det_annotation_from_odgt(item, img_shape, flip=0)
     interaction_boxes = get_hoi_annotation_from_odgt(item, total_boxes, scale)
+
+    num_bounding_boxes_in_ground_truth = len(gt_boxes)
+    interaction_boxes['num_bounding_boxes_in_ground_truth'] = num_bounding_boxes_in_ground_truth
+
     return dict(image_id=img_name, annotations=interaction_boxes)
 
 
@@ -438,7 +442,7 @@ def make_hico_transforms(image_set, test_scale=-1):
             ),
             normalize,
         ])
-    if image_set == 'test':
+    if image_set == 'test' or image_set == 'valid':
         if test_scale == -1:
             return Compose([
                 normalize,
@@ -457,12 +461,15 @@ class two_point_five_VRD(VisionDataset):
         self.annotations = [parse_one_gt_line(l.strip()) for l in open(annFile, 'r').readlines()]
         self.transforms = transforms
         self.image_set = image_set
+        self.image_folder_name = self.image_set
+        if self.image_set == 'valid':
+            self.image_folder_name = 'validation'
 
     def __getitem__(self, index):
         ann = self.annotations[index]
         img_name = ann['image_id']
         target = ann['annotations']
-        img_path = './data/2.5vrd/images/' + self.image_set + '/' + img_name
+        img_path = './data/2.5vrd/images/' + self.image_folder_name + '/' + img_name
         img = cv2.imread(img_path, cv2.IMREAD_COLOR)
         img = Image.fromarray(img[:, :, ::-1]).convert('RGB')
         if self.transforms is not None:

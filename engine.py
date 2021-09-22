@@ -18,6 +18,26 @@ import util.misc as utils
 
 from magic_numbers import *
 from process_model_outputs import *
+from evaluation import *
+import pandas as pd
+
+
+def progressBar(i, max, text):
+    """
+    Produce a progress bar during training.
+    :param i: index of current iteration/epoch.
+    :param max: max number of iterations/epochs.
+    :param text: Text to print on the right of the progress bar.
+    :return: None
+    """
+    if TRAIN_ON_ONE_IMAGE:
+        return
+    bar_size = 60
+    j = i / max
+    sys.stdout.write('\r')
+    sys.stdout.write(
+        f"[{'=' * int(bar_size * j):{bar_size}s}] {int(100 * j)}%  {text}")
+    sys.stdout.flush()
 
 
 def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
@@ -25,6 +45,24 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
                     device: torch.device, epoch: int, max_norm: float = 0):
     iteratoin_count = 0
     max_num_iterations = len(data_loader)
+
+    tp = 0
+    denominator = 0
+
+    image_id_1_list = list()
+    entity_1_list = list()
+    xmin_1_list = list()
+    xmax_1_list = list()
+    ymin_1_list = list()
+    ymax_1_list = list()
+    image_id_2_list = list()
+    entity_2_list = list()
+    xmin_2_list = list()
+    xmax_2_list = list()
+    ymin_2_list = list()
+    ymax_2_list = list()
+    distance_list = list()
+    occlusion_list = list()
 
 
     ############################################################################
@@ -101,7 +139,7 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
         original_targets = targets
 
         samples = samples.to(device)
-        targets = [{k: v.to(device) for k, v in t.items() if k not in ['image_id']} for t in targets]
+        targets = [{k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for t in targets]
 
         outputs = model(samples)
         loss_dict = criterion(outputs, targets)
@@ -141,20 +179,67 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
                 print("empty hoi_list")
             else:
                 try:
-                    for i in range(0, 2):
+                    for i in range(0, top_k_predictions_to_print):
                         print(hoi_list[0]['hoi_list'][i])
                 except:
                     pass
             print()
         ########################################################################
 
+        hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets)
+        # tp += evaluate_on_training_set(hoi_list, targets)
+        # denominator += len(targets) * 2
+        # print('tp:           ', tp)
+        # print('denominator:  ', denominator)
+        # print('precision:    ', tp/denominator)
+        # print()
+        # print()
+        # print()
 
+        # Construct outputs for training set and write to a csv file.
+        #  Coordinates are be in normalized xyxy format
 
-
-        # TODO: Compute Precision
+        construct_evaluation_output_using_hoi_list(hoi_list,
+                                                   original_targets,
+                                                                   image_id_1_list,
+                                                                   entity_1_list,
+                                                                   xmin_1_list,
+                                                                   xmax_1_list,
+                                                                   ymin_1_list,
+                                                                   ymax_1_list,
+                                                                   image_id_2_list,
+                                                                   entity_2_list,
+                                                                   xmin_2_list,
+                                                                   xmax_2_list,
+                                                                   ymin_2_list,
+                                                                   ymax_2_list,
+                                                                   distance_list, occlusion_list)
 
         iteratoin_count += 1
 
+    df = pd.DataFrame({'image_id_1': image_id_1_list,
+                  'entity_1': entity_1_list,
+                  'xmin_1': xmin_1_list,
+                  'xmax_1': xmax_1_list,
+                  'ymin_1': ymin_1_list,
+                  'ymax_1': ymax_1_list,
+                  'image_id_2': image_id_2_list,
+                  'entity_2': entity_2_list,
+                  'xmin_2': xmin_2_list,
+                  'xmax_2': xmax_2_list,
+                  'ymin_2': ymin_2_list,
+                  'ymax_2': ymax_2_list,
+                  'occlusion': occlusion_list,
+                  'distance': distance_list,
+                  })
+
+
+    file_name = 'temp_df'
+
+    file_name = file_name + '_train_epoch_' + str(epoch) + '.csv'
+    print(file_name)
+
+    df.to_csv(file_name, index=False)
 
 
 
@@ -168,7 +253,87 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
 
 
 
+def validate(args, model: torch.nn.Module, criterion: torch.nn.Module,
+                    data_loader: Iterable, optimizer: torch.optim.Optimizer,
+                    device: torch.device, epoch: int, max_norm: float = 0):
+    model.eval()
+    criterion.eval()
 
+    iteratoin_count = 0
+    max_num_iterations = len(data_loader)
+
+    image_id_1_list = list()
+    entity_1_list = list()
+    xmin_1_list = list()
+    xmax_1_list = list()
+    ymin_1_list = list()
+    ymax_1_list = list()
+    image_id_2_list = list()
+    entity_2_list = list()
+    xmin_2_list = list()
+    xmax_2_list = list()
+    ymin_2_list = list()
+    ymax_2_list = list()
+    distance_list = list()
+    occlusion_list = list()
+
+    for samples, targets in data_loader:
+
+        original_targets = targets
+        samples = samples.to(device)
+        targets = [
+            {k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for
+            t in targets]
+
+        outputs = model(samples)
+        hoi_list = generate_hoi_list_using_model_outputs(args, outputs,
+                                                         original_targets)
+        construct_evaluation_output_using_hoi_list(hoi_list,
+                                                   original_targets,
+                                                   image_id_1_list,
+                                                   entity_1_list,
+                                                   xmin_1_list,
+                                                   xmax_1_list,
+                                                   ymin_1_list,
+                                                   ymax_1_list,
+                                                   image_id_2_list,
+                                                   entity_2_list,
+                                                   xmin_2_list,
+                                                   xmax_2_list,
+                                                   ymin_2_list,
+                                                   ymax_2_list,
+                                                   distance_list,
+                                                   occlusion_list)
+
+        progressBar(iteratoin_count + 1, max_num_iterations, 'Validate Progress')
+
+        iteratoin_count += 1
+
+    df = pd.DataFrame({'image_id_1': image_id_1_list,
+                       'entity_1': entity_1_list,
+                       'xmin_1': xmin_1_list,
+                       'xmax_1': xmax_1_list,
+                       'ymin_1': ymin_1_list,
+                       'ymax_1': ymax_1_list,
+                       'image_id_2': image_id_2_list,
+                       'entity_2': entity_2_list,
+                       'xmin_2': xmin_2_list,
+                       'xmax_2': xmax_2_list,
+                       'ymin_2': ymin_2_list,
+                       'ymax_2': ymax_2_list,
+                       'occlusion': occlusion_list,
+                       'distance': distance_list,
+                       })
+
+    file_name = 'temp_df'
+    file_name = file_name + '_valid_epoch_' + str(epoch) + '.csv'
+    print(file_name)
+    df.to_csv(file_name, index=False)
+
+
+
+
+    return
 
 
 

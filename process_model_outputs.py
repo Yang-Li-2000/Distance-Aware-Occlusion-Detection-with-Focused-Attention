@@ -127,11 +127,13 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
                 o_cls=float(o_cls),
                 i_cls=float(i_cls), h_name=h_name, o_name=o_name,
                 i_name=i_name,
+                # unprocessed_h_box=human_box_max_list[idx_box],
+                # unprocessed_o_box=object_box_max_list[idx_box]
             )
             hoi_list.append(pp)
 
         # TODO: implement a new nms. The thresholds should be changed.
-        hoi_list = triplet_nms(hoi_list)
+        hoi_list = triplet_nms_for_vrd(hoi_list, nms_iou_human, num_iou_object)
         item = dict(image_id=image_id, hoi_list=hoi_list)
         final_hoi_result_list.append(item)
 

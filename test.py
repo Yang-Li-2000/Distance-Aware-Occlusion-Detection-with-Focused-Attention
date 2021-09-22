@@ -147,6 +147,31 @@ def triplet_nms(hoi_list):
             new_hoi_list.append(hoi_list[idx])
     return new_hoi_list
 
+def triplet_nms_for_vrd(hoi_list, nms_iou_human, num_iou_object):
+    hoi_list.sort(key=lambda x: x['h_cls'] * x['o_cls'] * x['i_cls'],
+                  reverse=True)
+    mask = [True] * len(hoi_list)
+    for idx_x in range(len(hoi_list)):
+        if mask[idx_x] is False:
+            continue
+        for idx_y in range(idx_x + 1, len(hoi_list)):
+            x = hoi_list[idx_x]
+            y = hoi_list[idx_y]
+            iou_human = IoU(x['h_box'], y['h_box'])
+            iou_object = IoU(x['o_box'], y['o_box'])
+            if iou_human > nms_iou_human \
+                    and iou_object > num_iou_object \
+                    and x['i_name'] == y['i_name'] \
+                    and x['o_name'] == y['o_name'] \
+                    and x['h_name'] == y['h_name']:
+                mask[idx_y] = False
+    new_hoi_list = []
+    for idx in range(len(mask)):
+        if mask[idx] is True:
+            new_hoi_list.append(hoi_list[idx])
+    return new_hoi_list
+
+
 
 def inference_on_data(args, model_path, image_set, max_to_viz=10, test_scale=-1):
     assert image_set in ['train', 'test'], image_set
