@@ -74,7 +74,8 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
 
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.6f}'))
-    metric_logger.add_meter('class_error', utils.SmoothedValue(window_size=1, fmt='{value:.2f}'))
+    metric_logger.add_meter('class_error_action', utils.SmoothedValue(window_size=1, fmt='{value:.2f}'))
+    metric_logger.add_meter('class_error_occlusion', utils.SmoothedValue(window_size=1, fmt='{value:.2f}'))
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
 
@@ -151,7 +152,8 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
         optimizer.step()
 
         metric_logger.update(loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled)
-        metric_logger.update(class_error=loss_dict_reduced['class_error'])
+        metric_logger.update(class_error_action=loss_dict_reduced['class_error_action'])
+        metric_logger.update(class_error_occlusion=loss_dict_reduced['class_error_occlusion'])
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
         ########################################################################

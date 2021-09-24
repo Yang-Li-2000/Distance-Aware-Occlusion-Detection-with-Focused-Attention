@@ -147,7 +147,7 @@ def get_det_annotation_from_odgt(item, shape, flip, gt_size_min=1):
     return gt_boxes, ignored_boxes, total_boxes
 
 
-def get_interaction_box(human_box, object_box, hoi_id):
+def get_interaction_box(human_box, object_box, hoi_id, occlusion_id):
     hx1, hy1, hx2, hy2, hid = human_box
     ox1, oy1, ox2, oy2, oid = object_box
     # hcx, hcy = (hx1 + hx2) / 2, (hy1 + hy2) / 2
@@ -156,7 +156,7 @@ def get_interaction_box(human_box, object_box, hoi_id):
     # dy = (hcy - ocy) / 5
     # xx1, yy1, xx2, yy2 = list(map(int, [ox1 + dx, oy1 + dy, ox2 + dx, oy2 + dy]))
     xx1, yy1, xx2, yy2 = min(hx1, ox1), min(hy1, oy1), max(hx2, ox2), max(hy2, oy2)
-    return [xx1, yy1, xx2, yy2, hoi_id]
+    return [xx1, yy1, xx2, yy2, hoi_id, occlusion_id]
 
 
 def xyxy_to_cxcywh(box):
@@ -166,7 +166,7 @@ def xyxy_to_cxcywh(box):
 
 def get_hoi_annotation_from_odgt(item, total_boxes, scale):
     human_boxes, object_boxes, action_boxes = [], [], []
-    human_labels, object_labels, action_labels = [], [], []
+    human_labels, object_labels, action_labels, occlusion_labels = [], [], [], []
     img_hh, img_ww = item['height'], item['width']
     for hoi in item.get('hoi', []):
         x1, y1, x2, y2, cls_id = list(map(int, total_boxes[int(hoi['subject_id'])]))
@@ -177,8 +177,9 @@ def get_hoi_annotation_from_odgt(item, total_boxes, scale):
         object_box = x1 // scale, y1 // scale, x2 // scale, y2 // scale, cls_id
         if cls_id == -1 or x1 >= x2 or y1 >= y2:
             continue
-        hoi_id = distance_name_to_id[hoi['interaction']]
-        hoi_box = get_interaction_box(human_box=human_box, object_box=object_box, hoi_id=hoi_id)
+        hoi_id = distance_name_to_id[hoi['distance']]
+        occlusion_id = occlusion_name_to_id[hoi['occlusion']]
+        hoi_box = get_interaction_box(human_box=human_box, object_box=object_box, hoi_id=hoi_id, occlusion_id=occlusion_id)
 
         human_boxes.append(human_box[0:4])
         object_boxes.append(object_box[0:4])
@@ -186,6 +187,7 @@ def get_hoi_annotation_from_odgt(item, total_boxes, scale):
         human_labels.append(human_box[4])
         object_labels.append(object_box[4])
         action_labels.append(hoi_box[4])
+        occlusion_labels.append(hoi_box[5])
     return dict(
         human_boxes=torch.from_numpy(np.array(human_boxes).astype(np.float32)),
         human_labels=torch.from_numpy(np.array(human_labels)),
@@ -193,6 +195,7 @@ def get_hoi_annotation_from_odgt(item, total_boxes, scale):
         object_labels=torch.from_numpy(np.array(object_labels)),
         action_boxes=torch.from_numpy(np.array(action_boxes).astype(np.float32)),
         action_labels=torch.from_numpy(np.array(action_labels)),
+        occlusion_labels=torch.from_numpy(np.array(occlusion_labels)),
         image_id=item['file_name'],
         org_size=torch.as_tensor([int(img_hh), int(img_ww)]),
     )
@@ -479,19 +482,17 @@ class two_point_five_VRD(VisionDataset):
     def __len__(self):
         return len(self.annotations)
 
-# TODO: implement functions for occlusions
-# task: 'distance' or 'occlusion'
+# Task: 'distance' + 'occlusion'
 def build(image_set, test_scale=-1):
 
     if image_set == 'train':
-        annotation_file = './data/2.5vrd/annotation_train_distances.odgt'
+        annotation_file = './data/2.5vrd/annotation_train_combined.odgt'
         if USE_SMALL_ANNOTATION_FILE:
             annotation_file = './data/2.5vrd/' + small_annotation_file
-
     elif image_set == 'valid':
-        annotation_file = './data/2.5vrd/annotation_valid_distances.odgt'
+        annotation_file = './data/2.5vrd/annotation_valid_combined.odgt'
     elif image_set == 'test':
-        annotation_file = './data/2.5vrd/annotation_test_distances.odgt'
+        annotation_file = './data/2.5vrd/annotation_test_combined.odgt'
     else:
         raise Exception()
     dataset = two_point_five_VRD(root='./data/2.5vrd',

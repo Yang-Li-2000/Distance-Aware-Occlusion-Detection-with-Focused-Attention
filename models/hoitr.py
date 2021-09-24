@@ -52,6 +52,7 @@ class HoiTR(nn.Module):
         self.object_cls_embed = nn.Linear(hidden_dim, num_classes + 1)
         self.object_box_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.action_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
+        self.occlusion_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
 
     def forward(self, samples: NestedTensor):
         """ The forward expects a NestedTensor, which consists of:
@@ -81,6 +82,7 @@ class HoiTR(nn.Module):
         object_outputs_class = self.object_cls_embed(hs)
         object_outputs_coord = self.object_box_embed(hs).sigmoid()
         action_outputs_class = self.action_cls_embed(hs)
+        occlusion_outputs_class = self.occlusion_cls_embed(hs)
 
         out = {
             'human_pred_logits': human_outputs_class[-1],
@@ -88,6 +90,7 @@ class HoiTR(nn.Module):
             'object_pred_logits': object_outputs_class[-1],
             'object_pred_boxes': object_outputs_coord[-1],
             'action_pred_logits': action_outputs_class[-1],
+            'occlusion_pred_logits': occlusion_outputs_class[-1]
         }
 
         if self.aux_loss:
@@ -97,6 +100,7 @@ class HoiTR(nn.Module):
                 object_outputs_class,
                 object_outputs_coord,
                 action_outputs_class,
+                occlusion_outputs_class
             )
         return out
 
@@ -107,6 +111,7 @@ class HoiTR(nn.Module):
                       object_outputs_class,
                       object_outputs_coord,
                       action_outputs_class,
+                      occlusion_outputs_class
                       ):
         # this is a workaround to make torchscript happy, as torchscript
         # doesn't support dictionary with non-homogeneous values, such
@@ -117,18 +122,21 @@ class HoiTR(nn.Module):
             'object_pred_logits': c,
             'object_pred_boxes': d,
             'action_pred_logits': e,
+            'occlusion_pred_logits': f,
         } for
             a,
             b,
             c,
             d,
             e,
+            f,
             in zip(
             human_outputs_class[:-1],
             human_outputs_coord[:-1],
             object_outputs_class[:-1],
             object_outputs_coord[:-1],
             action_outputs_class[:-1],
+            occlusion_outputs_class[:-1]
         )]
 
 
@@ -167,6 +175,11 @@ class SetCriterion(nn.Module):
         action_empty_weight[-1] = self.eos_coef
         self.register_buffer('action_empty_weight', action_empty_weight)
 
+        occlusion_empty_weight = torch.ones(num_actions + 1)
+        occlusion_empty_weight[-1] = self.eos_coef
+        self.register_buffer('occlusion_empty_weight', occlusion_empty_weight)
+
+
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         """Classification loss (NLL)
         targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
@@ -174,15 +187,19 @@ class SetCriterion(nn.Module):
         assert 'human_pred_logits' in outputs
         assert 'object_pred_logits' in outputs
         assert 'action_pred_logits' in outputs
+        assert 'occlusion_pred_logits' in outputs
+
         human_src_logits = outputs['human_pred_logits']
         object_src_logits = outputs['object_pred_logits']
         action_src_logits = outputs['action_pred_logits']
+        occlusion_src_logits = outputs['occlusion_pred_logits']
 
         idx = self._get_src_permutation_idx(indices)
 
         human_target_classes_o = torch.cat([t["human_labels"][J] for t, (_, J) in zip(targets, indices)])
         object_target_classes_o = torch.cat([t["object_labels"][J] for t, (_, J) in zip(targets, indices)])
         action_target_classes_o = torch.cat([t["action_labels"][J] for t, (_, J) in zip(targets, indices)])
+        occlusion_target_classes_o = torch.cat([t["occlusion_labels"][J] for t, (_, J) in zip(targets, indices)])
 
         human_target_classes = torch.full(human_src_logits.shape[:2], num_humans,
                                           dtype=torch.int64, device=human_src_logits.device)
@@ -196,22 +213,32 @@ class SetCriterion(nn.Module):
                                            dtype=torch.int64, device=action_src_logits.device)
         action_target_classes[idx] = action_target_classes_o
 
+        occlusion_target_classes = torch.full(occlusion_src_logits.shape[:2], self.num_actions,
+                                           dtype=torch.int64, device=occlusion_src_logits.device)
+        occlusion_target_classes[idx] = occlusion_target_classes_o
+
         human_loss_ce = F.cross_entropy(human_src_logits.transpose(1, 2),
                                         human_target_classes, self.human_empty_weight)
         object_loss_ce = F.cross_entropy(object_src_logits.transpose(1, 2),
                                          object_target_classes, self.object_empty_weight)
         action_loss_ce = F.cross_entropy(action_src_logits.transpose(1, 2),
                                          action_target_classes, self.action_empty_weight)
-        loss_ce = human_loss_ce + object_loss_ce + 2 * action_loss_ce
+        occlusion_loss_ce = F.cross_entropy(occlusion_src_logits.transpose(1, 2),
+                                         occlusion_target_classes, self.occlusion_empty_weight)
+
+        loss_ce = human_loss_ce + object_loss_ce + 2 * action_loss_ce + 2 * occlusion_loss_ce
         losses = {
             'loss_ce': loss_ce,
             'human_loss_ce': human_loss_ce,
             'object_loss_ce': object_loss_ce,
-            'action_loss_ce': action_loss_ce
+            'action_loss_ce': action_loss_ce,
+            'occlusion_loss_ce': occlusion_loss_ce
         }
 
+        # TODO: fix this
         if log:
-            losses['class_error'] = 100 - accuracy(action_src_logits[idx], action_target_classes_o)[0]
+            losses['class_error_action'] = 100 - accuracy(action_src_logits[idx], action_target_classes_o)[0]
+            losses['class_error_occlusion'] = 100 - accuracy(occlusion_src_logits[idx], occlusion_target_classes_o)[0]
         return losses
 
     @torch.no_grad()
@@ -219,13 +246,22 @@ class SetCriterion(nn.Module):
         """ Compute the cardinality error, ie the absolute error in the number of predicted non-empty boxes
         This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients
         """
-        pred_logits = outputs['action_pred_logits']
-        device = pred_logits.device
-        tgt_lengths = torch.as_tensor([len(v["action_labels"]) for v in targets], device=device)
+        pred_logits_action = outputs['action_pred_logits']
+        device_action = pred_logits_action.device
+        tgt_lengths_action = torch.as_tensor([len(v["action_labels"]) for v in targets], device=device_action)
         # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred = (pred_logits.argmax(-1) != pred_logits.shape[-1] - 1).sum(1)
-        card_err = F.l1_loss(card_pred.float(), tgt_lengths.float())
-        losses = {'cardinality_error': card_err}
+        card_pred_action = (pred_logits_action.argmax(-1) != pred_logits_action.shape[-1] - 1).sum(1)
+        card_err_action = F.l1_loss(card_pred_action.float(), tgt_lengths_action.float())
+
+        pred_logits_occlusion = outputs['occlusion_pred_logits']
+        device_occlusion = pred_logits_occlusion.device
+        tgt_lengths_occlusion = torch.as_tensor([len(v["occlusion_labels"]) for v in targets], device=device_occlusion)
+        # Count the number of predictions that are NOT "no-object" (which is the last class)
+        card_pred_occlusion = (pred_logits_occlusion.argmax(-1) != pred_logits_occlusion.shape[-1] - 1).sum(1)
+        card_err_occlusion = F.l1_loss(card_pred_occlusion.float(), tgt_lengths_occlusion.float())
+
+        losses = {'cardinality_error_action': card_err_action,
+                  'cardinality_error_occlusion': card_err_occlusion}
         return losses
 
     def loss_boxes(self, outputs, targets, indices, num_boxes):

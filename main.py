@@ -228,9 +228,9 @@ def main(args):
         lr_scheduler.step()
 
         # Validate
-        with torch.no_grad():
-            validate(args, model, criterion, data_loader_valid, optimizer,
-                     device, epoch, args.clip_max_norm)
+        # with torch.no_grad():
+        #     validate(args, model, criterion, data_loader_valid, optimizer,
+        #              device, epoch, args.clip_max_norm)
 
         # Save Checkpoint
         # TODO: save extra checkpoints?
