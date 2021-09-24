@@ -156,6 +156,22 @@ def construct_evaluation_output_using_hoi_list(hoi_list, original_targets,
             distance = distance_name_to_id[current_hoi['i_name']]
             occlusion = occlusion_name_to_id[current_hoi['ocl_name']]
 
+
+            assert type(image_id_1[:-4]) == str
+            assert type(entity_1) == str
+            assert type(xmin_1.item()) == float
+            assert type(xmax_1.item()) == float
+            assert type(ymin_1.item()) == float
+            assert type(ymax_1.item()) == float
+            assert type(image_id_2[:-4]) == str
+            assert type(entity_2) == str
+            assert type(xmin_2.item()) == float
+            assert type(xmax_2.item()) == float
+            assert type(ymin_2.item()) == float
+            assert type(ymax_2.item()) == float
+            assert type(distance) == int
+            assert type(occlusion) == int
+
             image_id_1_list.append(image_id_1[:-4])
             entity_1_list.append(entity_1)
             xmin_1_list.append(xmin_1.item())
@@ -168,7 +184,7 @@ def construct_evaluation_output_using_hoi_list(hoi_list, original_targets,
             xmax_2_list.append(xmax_2.item())
             ymin_2_list.append(ymin_2.item())
             ymax_2_list.append(ymax_2.item())
-            distance_list.append(int(distance))
-            occlusion_list.append(int(occlusion))
+            distance_list.append(distance)
+            occlusion_list.append(occlusion)
 
     return
