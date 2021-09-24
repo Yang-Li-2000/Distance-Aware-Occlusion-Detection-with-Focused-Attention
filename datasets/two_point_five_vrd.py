@@ -82,11 +82,11 @@ distance_id_to_name = {
 }
 
 distance_name_to_id = {
-    'no majority': 0,
-    'not sure': 0,
-    'A is closer': 1,
-    'B is closer': 2,
-    'same distance': 3
+    'no majority': int(0),
+    'not sure': int(0),
+    'A is closer': int(1),
+    'B is closer': int(2),
+    'same distance': int(3)
 }
 
 
@@ -99,11 +99,11 @@ occlusion_id_to_name = {
 }
 
 occlusion_name_to_id = {
-    'no majority': 0,
-    'no occlusion': 0,
-    'A occludes B': 1,
-    'B occludes A': 2,
-    'mutually occluded': 3
+    'no majority': int(0),
+    'no occlusion': int(0),
+    'A occludes B': int(1),
+    'B occludes A': int(2),
+    'mutually occluded': int(3)
 }
 
 def convert_xywh2x1y1x2y2(box, shape, flip):
