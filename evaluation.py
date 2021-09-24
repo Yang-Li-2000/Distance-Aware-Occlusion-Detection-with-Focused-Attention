@@ -168,7 +168,7 @@ def construct_evaluation_output_using_hoi_list(hoi_list, original_targets,
             xmax_2_list.append(xmax_2.item())
             ymin_2_list.append(ymin_2.item())
             ymax_2_list.append(ymax_2.item())
-            distance_list.append(distance)
-            occlusion_list.append(occlusion)
+            distance_list.append(int(distance))
+            occlusion_list.append(int(occlusion))
 
     return

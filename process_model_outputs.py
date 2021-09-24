@@ -135,7 +135,7 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
                 continue
             pp = dict(
                 h_box=h_box, o_box=o_box, i_box=i_box, ocl_box=ocl_box,
-                h_cls=float(h_cls), o_cls=float(o_cls), i_cls=float(i_cls), ocl_cls=ocl_cls,
+                h_cls=float(h_cls), o_cls=float(o_cls), i_cls=float(i_cls), ocl_cls=float(ocl_cls),
                 h_name=h_name, o_name=o_name, i_name=i_name, ocl_name=ocl_name
             )
             hoi_list.append(pp)
