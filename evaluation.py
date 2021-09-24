@@ -3,6 +3,7 @@ from datasets.two_point_five_vrd import *
 from util.box_ops import box_cxcywh_to_xyxy
 
 
+# Not used
 def evaluate_on_training_set(hoi_list, targets):
 
     batch_size = len(targets)
@@ -10,8 +11,6 @@ def evaluate_on_training_set(hoi_list, targets):
     tp = 0
     fp = 0
     fn = 0
-
-
 
     for i in range(batch_size):
         current_hoi_list = hoi_list[i]['hoi_list']
@@ -137,6 +136,9 @@ def construct_evaluation_output_using_hoi_list(hoi_list, original_targets,
         org_size = original_targets[i]['org_size']
         hh, ww = org_size
 
+        # Hndle index out of bound exception.
+        # TODO: Record the numbers that caused the exceptions.
+        num_hoi_to_produce = min(num_hoi_to_produce, len(hoi_list[i]['hoi_list']))
 
         for j in range(num_hoi_to_produce):
             current_hoi = hoi_list[i]['hoi_list'][j]

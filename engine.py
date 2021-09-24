@@ -22,6 +22,11 @@ from evaluation import *
 import pandas as pd
 
 
+from torch.utils.tensorboard import SummaryWriter
+
+writer = SummaryWriter()
+
+
 def progressBar(i, max, text):
     """
     Produce a progress bar during training.
@@ -46,25 +51,6 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
     iteratoin_count = 0
     max_num_iterations = len(data_loader)
 
-    tp = 0
-    denominator = 0
-
-    image_id_1_list = list()
-    entity_1_list = list()
-    xmin_1_list = list()
-    xmax_1_list = list()
-    ymin_1_list = list()
-    ymax_1_list = list()
-    image_id_2_list = list()
-    entity_2_list = list()
-    xmin_2_list = list()
-    xmax_2_list = list()
-    ymin_2_list = list()
-    ymax_2_list = list()
-    distance_list = list()
-    occlusion_list = list()
-
-
     ############################################################################
     fixed_samples = None
     fixed_targets = None
@@ -82,7 +68,6 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
                 count += 1
                 continue
     ############################################################################
-
 
     model.train()
     criterion.train()
@@ -107,9 +92,6 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
                   targets[0]['action_labels'].cpu().numpy(),
                   targets[0]['object_labels'].cpu().numpy())
         ########################################################################
-
-
-
         ########################################################################
         # Print targets when USE_SMALL_ANNOTATION_FILE
         if not TRAIN_ON_ONE_IMAGE and USE_SMALL_ANNOTATION_FILE and DEBUG_OUTPUTS:
@@ -186,67 +168,23 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
             print()
         ########################################################################
 
-        hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets)
-        # tp += evaluate_on_training_set(hoi_list, targets)
-        # denominator += len(targets) * 2
-        # print('tp:           ', tp)
-        # print('denominator:  ', denominator)
-        # print('precision:    ', tp/denominator)
-        # print()
-        # print()
-        # print()
-
-        # Construct outputs for training set and write to a csv file.
-        #  Coordinates are be in normalized xyxy format
-
-        construct_evaluation_output_using_hoi_list(hoi_list,
-                                                   original_targets,
-                                                                   image_id_1_list,
-                                                                   entity_1_list,
-                                                                   xmin_1_list,
-                                                                   xmax_1_list,
-                                                                   ymin_1_list,
-                                                                   ymax_1_list,
-                                                                   image_id_2_list,
-                                                                   entity_2_list,
-                                                                   xmin_2_list,
-                                                                   xmax_2_list,
-                                                                   ymin_2_list,
-                                                                   ymax_2_list,
-                                                                   distance_list, occlusion_list)
-
         iteratoin_count += 1
-
-    df = pd.DataFrame({'image_id_1': image_id_1_list,
-                  'entity_1': entity_1_list,
-                  'xmin_1': xmin_1_list,
-                  'xmax_1': xmax_1_list,
-                  'ymin_1': ymin_1_list,
-                  'ymax_1': ymax_1_list,
-                  'image_id_2': image_id_2_list,
-                  'entity_2': entity_2_list,
-                  'xmin_2': xmin_2_list,
-                  'xmax_2': xmax_2_list,
-                  'ymin_2': ymin_2_list,
-                  'ymax_2': ymax_2_list,
-                  'occlusion': occlusion_list,
-                  'distance': distance_list,
-                  })
-
-
-    file_name = 'temp_df'
-
-    file_name = file_name + '_train_epoch_' + str(epoch) + '.csv'
-    print(file_name)
-
-    df.to_csv(file_name, index=False)
-
-
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
-    return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+
+    train_stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
+
+    # Write loss and lr to tensorboard at the end of each epoch
+    writer.add_scalar('Loss/train', train_stats['loss'], epoch)
+    writer.add_scalar('Loss/train/ce', train_stats['loss_ce'], epoch)
+    writer.add_scalar('Loss/train/bbox', train_stats['loss_bbox'], epoch)
+    writer.add_scalar('Loss/train/giou', train_stats['loss_giou'], epoch)
+    writer.add_scalar('Learning Rate', train_stats['lr'], epoch)
+
+
+    return train_stats
 
 
 
@@ -329,8 +267,6 @@ def validate(args, model: torch.nn.Module, criterion: torch.nn.Module,
     file_name = file_name + '_valid_epoch_' + str(epoch) + '.csv'
     print(file_name)
     df.to_csv(file_name, index=False)
-
-
 
 
     return

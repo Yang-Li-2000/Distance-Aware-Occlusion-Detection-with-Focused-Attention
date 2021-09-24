@@ -232,6 +232,8 @@ def main(args):
             validate(args, model, criterion, data_loader_valid, optimizer,
                      device, epoch, args.clip_max_norm)
 
+        # Save Checkpoint
+        # TODO: save extra checkpoints?
         if args.output_dir:
             checkpoint_paths = [output_dir / 'checkpoint.pth']
             # extra checkpoint before LR drop and every 10 epochs

@@ -28,5 +28,5 @@ num_workers_train = 16 # Not implemented yet
 batch_size_train = 5 # Not implemented yet
 
 
-num_workers_validation = 48
-batch_size_validation = 30
+num_workers_validation = 36 # 48
+batch_size_validation = 20  # 30
