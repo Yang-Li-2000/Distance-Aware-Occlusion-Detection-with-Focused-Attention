@@ -131,7 +131,7 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
                 o_name = index_to_name(int(cid))
             else:
                 o_name = coco_instance_id_to_name[int(cid)]
-            if i_cls < hoi_th or h_cls < human_th or o_cls < object_th:
+            if i_cls < hoi_th or h_cls < human_th or o_cls < object_th or ocl_cls < occlusion_th:
                 continue
             pp = dict(
                 h_box=h_box, o_box=o_box, i_box=i_box, ocl_box=ocl_box,
