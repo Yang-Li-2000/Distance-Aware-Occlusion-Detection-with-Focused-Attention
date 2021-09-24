@@ -3,7 +3,7 @@ TRAIN_ON_ONE_IMAGE = False
 index_of_that_image = 2
 
 # Train on a subset of the complete dataset.
-USE_SMALL_ANNOTATION_FILE = True
+USE_SMALL_ANNOTATION_FILE = False
 small_annotation_file = 'small_train_combined.odgt'
 
 # Disable shuffle or not. Useful for debugging.
@@ -18,10 +18,11 @@ top_k_predictions_to_print = 10
 human_th=0
 object_th=0
 hoi_th=0
+occlusion_th=0
 
 # nms thresholds in triplet_nms_for_vrd()
 nms_iou_human = 0.7
-num_iou_object = 0.7
+nms_iou_object = 0.7
 
 
 num_workers_train = 16 # Not implemented yet

@@ -26,7 +26,8 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
     elif args.dataset_file == 'two_point_five_vrd':
         num_classes = 602
         num_actions = 4
-        top_k = 200
+        top_k = 100
+        # TODO: increase --num_queries
     else:
         raise NotImplementedError()
 
@@ -46,11 +47,13 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
     img_id_list = image_id_list
     org_sizes = org_size_list
     action_pred_logits = outputs['action_pred_logits']
+    occlusion_pred_logits = outputs['occlusion_pred_logits']
     object_pred_logits = outputs['object_pred_logits']
     object_pred_boxes = outputs['object_pred_boxes']
     human_pred_logits = outputs['human_pred_logits']
     human_pred_boxes = outputs['human_pred_boxes']
     assert len(action_pred_logits) == len(img_id_list)
+    assert len(occlusion_pred_logits) == len(img_id_list)
 
     for idx_img in range(len(action_pred_logits)):
         image_id = img_id_list[idx_img]
@@ -58,6 +61,8 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
 
         act_cls = torch.nn.Softmax(dim=1)(
             action_pred_logits[idx_img]).detach().cpu().numpy()[:, :-1]
+        occlusion_cls = torch.nn.Softmax(dim=1)(
+            occlusion_pred_logits[idx_img]).detach().cpu().numpy()[:, :-1]
         human_cls = torch.nn.Softmax(dim=1)(
             human_pred_logits[idx_img]).detach().cpu().numpy()[:, :-1]
         object_cls = torch.nn.Softmax(dim=1)(
@@ -66,12 +71,14 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
         object_box = object_pred_boxes[idx_img].detach().cpu().numpy()
 
         keep = (act_cls.argmax(axis=1) != num_actions)
+        keep = keep * (occlusion_cls.argmax(axis=1) != num_actions)
         if args.dataset_file == 'two_point_five_vrd':
             keep = keep * (human_cls.argmax(axis=1) != num_classes)
         else:
             keep = keep * (human_cls.argmax(axis=1) != 2)
         keep = keep * (object_cls.argmax(axis=1) != num_classes)
         keep = keep * (act_cls > hoi_th).any(axis=1)
+        keep = keep * (occlusion_cls > occlusion_th).any(axis=1)
         keep = keep * (human_cls > human_th).any(axis=1)
         keep = keep * (object_cls > object_th).any(axis=1)
 
@@ -82,23 +89,26 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
         object_val_max_list = object_cls[keep].max(axis=1)
         object_box_max_list = object_box[keep]
         keep_act_scores = act_cls[keep]
+        keep_occlusion_scores = occlusion_cls[keep]
 
-        keep_act_scores_1d = keep_act_scores.reshape(-1)
-        top_k_idx_1d = np.argsort(-keep_act_scores_1d)[:top_k]
-        box_action_pairs = [(idx_1d // num_actions, idx_1d % num_actions)
-                            for idx_1d in top_k_idx_1d]
+        action_row_max_values, action_row_max_indices = torch.tensor(keep_act_scores).max(axis=1)
+        occlusion_row_max_values, occlusion_row_max_indices = torch.tensor(keep_occlusion_scores).max(axis=1)
+        top_k_indices = np.argsort(-action_row_max_values * occlusion_row_max_values)[:top_k]
 
         hoi_list = []
-        for idx_box, idx_action in box_action_pairs:
+        for idx_box in top_k_indices:
             # action
             i_box = (0, 0, 0, 0)
+            idx_action = action_row_max_indices[idx_box]
             i_cls = keep_act_scores[idx_box, idx_action]
-            if args.dataset_file == 'two_point_five_vrd':
-                i_name = distance_id_to_name[int(idx_action)]
-            else:
-                i_name = hoi_interaction_names[int(idx_action)]
-            if i_name in ['__background__']:
-                continue
+            i_name = distance_id_to_name[int(idx_action)]
+
+            # occlusion
+            ocl_box = (0, 0, 0, 0)
+            idx_occlusion = occlusion_row_max_indices[idx_box]
+            ocl_cls = keep_occlusion_scores[idx_box, idx_occlusion]
+            ocl_name = occlusion_id_to_name[int(idx_occlusion)]
+
             # human
             cid = human_idx_max_list[idx_box]
             cx, cy, w, h = human_box_max_list[idx_box]
@@ -124,17 +134,14 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
             if i_cls < hoi_th or h_cls < human_th or o_cls < object_th:
                 continue
             pp = dict(
-                h_box=h_box, o_box=o_box, i_box=i_box, h_cls=float(h_cls),
-                o_cls=float(o_cls),
-                i_cls=float(i_cls), h_name=h_name, o_name=o_name,
-                i_name=i_name,
-                # unprocessed_h_box=human_box_max_list[idx_box],
-                # unprocessed_o_box=object_box_max_list[idx_box]
+                h_box=h_box, o_box=o_box, i_box=i_box, ocl_box=ocl_box,
+                h_cls=float(h_cls), o_cls=float(o_cls), i_cls=float(i_cls), ocl_cls=ocl_cls,
+                h_name=h_name, o_name=o_name, i_name=i_name, ocl_name=ocl_name
             )
             hoi_list.append(pp)
 
         # TODO: implement a new nms. The thresholds should be changed.
-        hoi_list = triplet_nms_for_vrd(hoi_list, nms_iou_human, num_iou_object)
+        hoi_list = triplet_nms_for_vrd(hoi_list, nms_iou_human, nms_iou_object)
         item = dict(image_id=image_id, hoi_list=hoi_list)
         final_hoi_result_list.append(item)
 

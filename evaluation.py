@@ -136,7 +136,7 @@ def construct_evaluation_output_using_hoi_list(hoi_list, original_targets,
         org_size = original_targets[i]['org_size']
         hh, ww = org_size
 
-        # Hndle index out of bound exception.
+        # Handle index out of bound exception.
         # TODO: Record the numbers that caused the exceptions.
         num_hoi_to_produce = min(num_hoi_to_produce, len(hoi_list[i]['hoi_list']))
 
@@ -154,6 +154,7 @@ def construct_evaluation_output_using_hoi_list(hoi_list, original_targets,
             xmin_2, ymin_2, xmax_2, ymax_2 = xmin_2/ww, ymin_2/hh, xmax_2/ww, ymax_2/hh
 
             distance = distance_name_to_id[current_hoi['i_name']]
+            occlusion = occlusion_name_to_id[current_hoi['ocl_name']]
 
             image_id_1_list.append(image_id_1[:-4])
             entity_1_list.append(entity_1)
@@ -168,6 +169,6 @@ def construct_evaluation_output_using_hoi_list(hoi_list, original_targets,
             ymin_2_list.append(ymin_2.item())
             ymax_2_list.append(ymax_2.item())
             distance_list.append(distance)
-            occlusion_list.append(0)
+            occlusion_list.append(occlusion)
 
     return

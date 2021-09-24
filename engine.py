@@ -180,16 +180,14 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
 
     # Write loss and lr to tensorboard at the end of each epoch
     writer.add_scalar('Loss/train', train_stats['loss'], epoch)
-    writer.add_scalar('Loss/train/ce', train_stats['loss_ce'], epoch)
-    writer.add_scalar('Loss/train/bbox', train_stats['loss_bbox'], epoch)
-    writer.add_scalar('Loss/train/giou', train_stats['loss_giou'], epoch)
-    writer.add_scalar('Learning Rate', train_stats['lr'], epoch)
-
+    writer.add_scalar('loss_ce/train', train_stats['loss_ce'], epoch)
+    writer.add_scalar('loss_bbox/train', train_stats['loss_bbox'], epoch)
+    writer.add_scalar('loss_giou/train', train_stats['loss_giou'], epoch)
+    writer.add_scalar('lr', train_stats['lr'], epoch)
+    writer.add_scalar('Class Error/train/distance', train_stats['class_error_action'], epoch)
+    writer.add_scalar('Class Error/train/occlusion', train_stats['class_error_occlusion'], epoch)
 
     return train_stats
-
-
-
 
 
 
@@ -217,6 +215,11 @@ def validate(args, model: torch.nn.Module, criterion: torch.nn.Module,
     distance_list = list()
     occlusion_list = list()
 
+    loss = 0
+    loss_ce = 0
+    loss_bbox = 0
+    loss_giou = 0
+
     for samples, targets in data_loader:
 
         original_targets = targets
@@ -226,8 +229,23 @@ def validate(args, model: torch.nn.Module, criterion: torch.nn.Module,
             t in targets]
 
         outputs = model(samples)
-        hoi_list = generate_hoi_list_using_model_outputs(args, outputs,
-                                                         original_targets)
+
+        # Compute Losses
+        loss_dict = criterion(outputs, targets)
+        weight_dict = criterion.weight_dict
+        # reduce losses over all GPUs for logging purposes
+        loss_dict_reduced = utils.reduce_dict(loss_dict)
+        loss_dict_reduced_unscaled = {f'{k}_unscaled': v for k, v in loss_dict_reduced.items()}
+        loss_dict_reduced_scaled = {k: v * weight_dict[k] for k, v in loss_dict_reduced.items() if k in weight_dict}
+        losses_reduced_scaled = sum(loss_dict_reduced_scaled.values())
+        loss_value = losses_reduced_scaled.item()
+        loss += loss_value
+        loss_ce += loss_dict_reduced_scaled['loss_ce']
+        loss_bbox += loss_dict_reduced_scaled['loss_bbox']
+        loss_giou += loss_dict_reduced_scaled['loss_giou']
+
+        # Construct Evaluation Outputs
+        hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets)
         construct_evaluation_output_using_hoi_list(hoi_list,
                                                    original_targets,
                                                    image_id_1_list,
@@ -245,10 +263,21 @@ def validate(args, model: torch.nn.Module, criterion: torch.nn.Module,
                                                    distance_list,
                                                    occlusion_list)
 
-        progressBar(iteratoin_count + 1, max_num_iterations, 'Validate Progress')
+        progressBar(iteratoin_count + 1, max_num_iterations, 'Validate Progress    ')
 
         iteratoin_count += 1
 
+    # Record Losses
+    loss = loss / iteratoin_count
+    loss_ce = loss_ce / iteratoin_count
+    loss_bbox = loss_bbox / iteratoin_count
+    loss_giou = loss_giou / iteratoin_count
+    writer.add_scalar('Loss/valid', loss, epoch)
+    writer.add_scalar('loss_ce/valid', loss_ce, epoch)
+    writer.add_scalar('loss_bbox/valid', loss_bbox, epoch)
+    writer.add_scalar('loss_giou/valid', loss_giou, epoch)
+
+    # Write Evaluation Outputs to Disk
     df = pd.DataFrame({'image_id_1': image_id_1_list,
                        'entity_1': entity_1_list,
                        'xmin_1': xmin_1_list,
