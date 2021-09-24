@@ -26,8 +26,6 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
     elif args.dataset_file == 'two_point_five_vrd':
         num_classes = 602
         num_actions = 4
-        global num_humans
-        num_humans = num_classes - 1
         top_k = 200
     else:
         raise NotImplementedError()
@@ -68,7 +66,10 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
         object_box = object_pred_boxes[idx_img].detach().cpu().numpy()
 
         keep = (act_cls.argmax(axis=1) != num_actions)
-        keep = keep * (human_cls.argmax(axis=1) != 2)
+        if args.dataset_file == 'two_point_five_vrd':
+            keep = keep * (human_cls.argmax(axis=1) != num_classes)
+        else:
+            keep = keep * (human_cls.argmax(axis=1) != 2)
         keep = keep * (object_cls.argmax(axis=1) != num_classes)
         keep = keep * (act_cls > hoi_th).any(axis=1)
         keep = keep * (human_cls > human_th).any(axis=1)

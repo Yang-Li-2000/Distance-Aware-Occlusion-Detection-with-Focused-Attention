@@ -91,7 +91,7 @@ distance_name_to_id = {
 
 
 occlusion_id_to_name = {
-    -1: 'no majority',
+    # -1: 'no majority',
     0: 'no occlusion',
     1: 'A occludes B',
     2: 'B occludes A',
@@ -99,7 +99,7 @@ occlusion_id_to_name = {
 }
 
 occlusion_name_to_id = {
-    'no majority': -1,
+    'no majority': 0,
     'no occlusion': 0,
     'A occludes B': 1,
     'B occludes A': 2,

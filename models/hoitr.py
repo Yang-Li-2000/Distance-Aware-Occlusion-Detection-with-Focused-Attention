@@ -352,7 +352,7 @@ def build(args):
         num_classes = 602
         num_actions = 4
         global num_humans
-        num_humans = num_classes - 1
+        num_humans = num_classes
     else:
         num_classes = 12
         num_actions = 11
