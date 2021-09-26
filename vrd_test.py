@@ -1,10 +1,3 @@
-# ------------------------------------------------------------------------
-# Licensed under the Apache License, Version 2.0 (the "License")
-# ------------------------------------------------------------------------
-# Modified from DETR (https://github.com/facebookresearch/detr)
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
-# ------------------------------------------------------------------------
-
 import argparse
 import datetime
 import getpass
@@ -25,29 +18,14 @@ from models import build_model
 
 from magic_numbers import *
 
-from torch.utils.tensorboard import SummaryWriter
-
-
-
-def create_log_dir(checkpoint='checkpoint', log_path='/data/LOG/train_log'):
-    base_dir = os.path.join(log_path, getpass.getuser())
-    exp_name = os.path.basename(os.path.abspath('.'))
-    log_dir = os.path.join(base_dir, exp_name)
-    print(log_dir)
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir, exist_ok=True)
-    if not os.path.exists(checkpoint):
-        cmd = "ln -s {} {}".format(log_dir, checkpoint)
-        os.system(cmd)
-
 
 def get_args_parser():
     parser = argparse.ArgumentParser('Set transformer detector', add_help=False)
     parser.add_argument('--lr', default=1e-4, type=float)
     parser.add_argument('--lr_backbone', default=1e-5, type=float)
-    parser.add_argument('--batch_size', default=2, type=int)
+    parser.add_argument('--batch_size', default=1, type=int)
     parser.add_argument('--weight_decay', default=1e-4, type=float)
-    parser.add_argument('--epochs', default=250, type=int)
+    parser.add_argument('--epochs', default=999999999999, type=int)
     parser.add_argument('--lr_drop', default=200, type=int)
     parser.add_argument('--clip_max_norm', default=0.1, type=float, help='gradient clipping max norm')
 
@@ -97,7 +75,6 @@ def get_args_parser():
 
     # Modify to your log path ******************************* !!!
     exp_time = datetime.datetime.now().strftime('%Y%m%d%H%M')
-    create_log_dir(checkpoint='checkpoint', log_path='/home')
     work_dir = 'checkpoint/p_{}'.format(exp_time)
 
     parser.add_argument('--output_dir', default=work_dir,
@@ -110,43 +87,18 @@ def get_args_parser():
                         help='start epoch')
     parser.add_argument('--num_workers', default=0, type=int)
 
-    # Distributed training parameters.
-    parser.add_argument('--world_size', default=1, type=int,
-                        help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
-    parser.add_argument('--swin_model', default='base_cascade',
-                        choices=['base_cascade', 'tiny_cascade', 'tiny_maskrcnn', 'small_cascade', 'small_maskrcnn'])
-    parser.add_argument('--manual_lr_change', type=float)
-
-    # Experiment name
-    parser.add_argument('--experiment_name', default='')
 
     return parser
 
 
 def main(args):
-    utils.init_distributed_mode(args)
-    print(args)
-    writer = SummaryWriter(args.experiment_name)
 
     device = torch.device(args.device)
-
-    # Fix the seed for reproducibility.
-    seed = args.seed + utils.get_rank()
-    torch.manual_seed(seed)
-    np.random.seed(seed)
-    random.seed(seed)
 
     model, criterion = build_model(args)
     model.to(device)
 
     model_without_ddp = model
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
-        model_without_ddp = model.module
-
-    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print('number of params:', n_parameters)
 
     param_dicts = [
         {"params": [p for n, p in model_without_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
@@ -158,45 +110,26 @@ def main(args):
     optimizer = torch.optim.AdamW(param_dicts, lr=args.lr, weight_decay=args.weight_decay)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
-    dataset_train = build_dataset(image_set='train', args=args)
     dataset_valid = build_dataset(image_set='valid', args=args, test_scale=800)
     dataset_test = build_dataset(image_set='test', args=args, test_scale=800)
 
-    if args.distributed:
-        sampler_train = DistributedSampler(dataset_train)
-        sampler_valid = DistributedSampler(dataset_valid)
-        sampler_test = DistributedSampler(dataset_test)
-    else:
-        sampler_train = torch.utils.data.RandomSampler(dataset_train)
-        sampler_valid = torch.utils.data.RandomSampler(dataset_valid)
-        sampler_test = torch.utils.data.RandomSampler(dataset_test)
-
-    if TRAIN_ON_ONE_IMAGE:
-        args.batch_size = 1
+    sampler_valid = torch.utils.data.RandomSampler(dataset_valid)
+    sampler_test = torch.utils.data.RandomSampler(dataset_test)
 
 
-
-    batch_sampler_train = torch.utils.data.BatchSampler(sampler_train, args.batch_size, drop_last=True)
-    data_loader_train = DataLoader(dataset_train, batch_sampler=batch_sampler_train,
-                                   collate_fn=utils.collate_fn, num_workers=args.num_workers)
-
-    sequential_data_loader_train = DataLoader(dataset_train,
-                                              args.batch_size,
-                                              collate_fn=utils.collate_fn,
-                                              num_workers=args.num_workers)
     # Construct validation data loader
-    # TODO: Disable shuffle for validation and test sets
-    batch_sampler_valid = torch.utils.data.BatchSampler(sampler_valid, batch_size_validation, drop_last=False)
+    # TODO: Disable shuffling for validation and test sets
+    batch_sampler_valid = torch.utils.data.BatchSampler(sampler_valid, args.batch_size, drop_last=False)
     data_loader_valid = DataLoader(dataset_valid,
                                    batch_sampler=batch_sampler_valid,
                                    collate_fn=utils.collate_fn,
-                                   num_workers=num_workers_validation)
+                                   num_workers=args.num_workers)
 
-    batch_sampler_test = torch.utils.data.BatchSampler(sampler_test, batch_size_validation, drop_last=False)
+    batch_sampler_test = torch.utils.data.BatchSampler(sampler_test, args.batch_size, drop_last=False)
     data_loader_test = DataLoader(dataset_test,
                                    batch_sampler=batch_sampler_test,
                                    collate_fn=utils.collate_fn,
-                                   num_workers=num_workers_validation)
+                                   num_workers=args.num_workers)
 
 
 
@@ -217,81 +150,36 @@ def main(args):
         my_model_dict.update(pretrain_dict)
         model_without_ddp.load_state_dict(my_model_dict)
 
-    output_dir = Path(args.output_dir)
-    if args.resume:
-        checkpoint = torch.load(args.resume, map_location='cpu')
-        model_without_ddp.load_state_dict(checkpoint['model'])
-        if 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
-            optimizer.load_state_dict(checkpoint['optimizer'])
-            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
-            args.start_epoch = checkpoint['epoch'] + 1
-        if args.manual_lr_change:
-            for g in optimizer.param_groups:
-                g['lr'] = args.manual_lr_change
-            print('Changed lr to', args.manual_lr_change)
+    # Load model from checkpoint
+    checkpoint = torch.load(args.resume, map_location='cpu')
+    model_without_ddp.load_state_dict(checkpoint['model'])
+    if 'optimizer' in checkpoint and 'lr_scheduler' in checkpoint and 'epoch' in checkpoint:
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+        args.start_epoch = checkpoint['epoch'] + 1
 
-
-    ############################################################################
-    if USE_SEQUENTIAL_LOADER:
-        data_loader_train = sequential_data_loader_train
-    ############################################################################
-
-
-    print("Start training")
+    print("Start Testing")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
-        if args.distributed:
-            sampler_train.set_epoch(epoch)
-
-        # Train
-        train_stats = train_one_epoch(
-            args, writer, model, criterion, data_loader_train, optimizer, device, epoch,
-            args.clip_max_norm)
-        lr_scheduler.step()
 
         # Validate
         with torch.no_grad():
-            validate(args, writer, 'valid', model, criterion, data_loader_valid, optimizer,
+            generate_evaluation_outputs(args, 'valid', model, criterion, data_loader_valid, optimizer,
                      device, epoch, args.clip_max_norm)
 
         # Test
         with torch.no_grad():
-            validate(args, writer, 'test', model, criterion, data_loader_test, optimizer,
+            generate_evaluation_outputs(args, 'test', model, criterion, data_loader_test, optimizer,
                      device, epoch, args.clip_max_norm)
 
-        # Save Checkpoint
-        if args.output_dir:
-            checkpoint_name = 'checkpoint_epoch_' + str(epoch) + '.pth'
-            checkpoint_paths = [output_dir / checkpoint_name]
-            # extra checkpoint before LR drop and every 10 epochs
-            if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % 100 == 0:
-                checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
-            if (epoch + 1) > args.lr_drop and (epoch + 1) % 10 == 0:
-                checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
-            for checkpoint_path in checkpoint_paths:
-                utils.save_on_master({
-                    'model': model_without_ddp.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'lr_scheduler': lr_scheduler.state_dict(),
-                    'epoch': epoch,
-                    'args': args,
-                }, checkpoint_path)
-
-        log_stats = {**{f'train_{k}': v for k, v in train_stats.items()},
-                     'epoch': epoch,
-                     'n_parameters': n_parameters}
-
-        if args.output_dir and utils.is_main_process():
-            with (output_dir / "log.txt").open("a") as f:
-                f.write(json.dumps(log_stats) + "\n")
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
-    print('Training time {}'.format(total_time_str))
+    print('Test time {}'.format(total_time_str))
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser('HOI Transformer training script', parents=[get_args_parser()])
+    parser = argparse.ArgumentParser('HOI Transformer test script', parents=[get_args_parser()])
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
