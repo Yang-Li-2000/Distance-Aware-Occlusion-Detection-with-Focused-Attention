@@ -21,6 +21,8 @@ from process_model_outputs import *
 from evaluation import *
 import pandas as pd
 
+from util.misc import is_main_process
+
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -200,20 +202,20 @@ def validate(args, valid_or_test, model: torch.nn.Module, criterion: torch.nn.Mo
     iteratoin_count = 0
     max_num_iterations = len(data_loader)
 
-    image_id_1_list = list()
-    entity_1_list = list()
-    xmin_1_list = list()
-    xmax_1_list = list()
-    ymin_1_list = list()
-    ymax_1_list = list()
-    image_id_2_list = list()
-    entity_2_list = list()
-    xmin_2_list = list()
-    xmax_2_list = list()
-    ymin_2_list = list()
-    ymax_2_list = list()
-    distance_list = list()
-    occlusion_list = list()
+    # image_id_1_list = list()
+    # entity_1_list = list()
+    # xmin_1_list = list()
+    # xmax_1_list = list()
+    # ymin_1_list = list()
+    # ymax_1_list = list()
+    # image_id_2_list = list()
+    # entity_2_list = list()
+    # xmin_2_list = list()
+    # xmax_2_list = list()
+    # ymin_2_list = list()
+    # ymax_2_list = list()
+    # distance_list = list()
+    # occlusion_list = list()
 
     loss = 0
     loss_ce = 0
@@ -233,7 +235,7 @@ def validate(args, valid_or_test, model: torch.nn.Module, criterion: torch.nn.Mo
         # Compute Losses
         loss_dict = criterion(outputs, targets)
         weight_dict = criterion.weight_dict
-        # reduce losses over all GPUs for logging purposes
+        # Reduce losses over all GPUs for logging purposes
         loss_dict_reduced = utils.reduce_dict(loss_dict)
         loss_dict_reduced_unscaled = {f'{k}_unscaled': v for k, v in loss_dict_reduced.items()}
         loss_dict_reduced_scaled = {k: v * weight_dict[k] for k, v in loss_dict_reduced.items() if k in weight_dict}
@@ -245,23 +247,23 @@ def validate(args, valid_or_test, model: torch.nn.Module, criterion: torch.nn.Mo
         loss_giou += loss_dict_reduced_scaled['loss_giou']
 
         # Construct Evaluation Outputs
-        hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets)
-        construct_evaluation_output_using_hoi_list(hoi_list,
-                                                   original_targets,
-                                                   image_id_1_list,
-                                                   entity_1_list,
-                                                   xmin_1_list,
-                                                   xmax_1_list,
-                                                   ymin_1_list,
-                                                   ymax_1_list,
-                                                   image_id_2_list,
-                                                   entity_2_list,
-                                                   xmin_2_list,
-                                                   xmax_2_list,
-                                                   ymin_2_list,
-                                                   ymax_2_list,
-                                                   distance_list,
-                                                   occlusion_list)
+        # hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets)
+        # construct_evaluation_output_using_hoi_list(hoi_list,
+        #                                            original_targets,
+        #                                            image_id_1_list,
+        #                                            entity_1_list,
+        #                                            xmin_1_list,
+        #                                            xmax_1_list,
+        #                                            ymin_1_list,
+        #                                            ymax_1_list,
+        #                                            image_id_2_list,
+        #                                            entity_2_list,
+        #                                            xmin_2_list,
+        #                                            xmax_2_list,
+        #                                            ymin_2_list,
+        #                                            ymax_2_list,
+        #                                            distance_list,
+        #                                            occlusion_list)
 
         progressBar(iteratoin_count + 1, max_num_iterations, valid_or_test + ' progress    ')
 
@@ -278,41 +280,43 @@ def validate(args, valid_or_test, model: torch.nn.Module, criterion: torch.nn.Mo
     writer.add_scalar('loss_giou/' + valid_or_test, loss_giou, epoch)
 
     # Write Evaluation Outputs to Disk
-    df = pd.DataFrame({'image_id_1': image_id_1_list,
-                       'entity_1': entity_1_list,
-                       'xmin_1': xmin_1_list,
-                       'xmax_1': xmax_1_list,
-                       'ymin_1': ymin_1_list,
-                       'ymax_1': ymax_1_list,
-                       'image_id_2': image_id_2_list,
-                       'entity_2': entity_2_list,
-                       'xmin_2': xmin_2_list,
-                       'xmax_2': xmax_2_list,
-                       'ymin_2': ymin_2_list,
-                       'ymax_2': ymax_2_list,
-                       'occlusion': occlusion_list,
-                       'distance': distance_list,
-                       })
+    # df = pd.DataFrame({'image_id_1': image_id_1_list,
+    #                    'entity_1': entity_1_list,
+    #                    'xmin_1': xmin_1_list,
+    #                    'xmax_1': xmax_1_list,
+    #                    'ymin_1': ymin_1_list,
+    #                    'ymax_1': ymax_1_list,
+    #                    'image_id_2': image_id_2_list,
+    #                    'entity_2': entity_2_list,
+    #                    'xmin_2': xmin_2_list,
+    #                    'xmax_2': xmax_2_list,
+    #                    'ymin_2': ymin_2_list,
+    #                    'ymax_2': ymax_2_list,
+    #                    'occlusion': occlusion_list,
+    #                    'distance': distance_list,
+    #                    })
+    #
+    # df.astype({'image_id_1': 'str',
+    #            'entity_1': 'str',
+    #            'xmin_1': 'float',
+    #            'xmax_1': 'float',
+    #            'ymin_1': 'float',
+    #            'ymax_1': 'float',
+    #            'image_id_2': 'str',
+    #            'entity_2': 'str',
+    #            'xmin_2': 'float',
+    #            'xmax_2': 'float',
+    #            'ymin_2': 'float',
+    #            'ymax_2': 'float',
+    #            'occlusion': 'int',
+    #            'distance': 'int'})
+    #
+    # file_name = 'temp_df'
+    # file_name = file_name + '_' + valid_or_test + '_' + str(epoch) + '.csv'
+    # print(file_name)
+    # df.to_csv(file_name, index=False)
 
-    df.astype({'image_id_1': 'str',
-               'entity_1': 'str',
-               'xmin_1': 'float',
-               'xmax_1': 'float',
-               'ymin_1': 'float',
-               'ymax_1': 'float',
-               'image_id_2': 'str',
-               'entity_2': 'str',
-               'xmin_2': 'float',
-               'xmax_2': 'float',
-               'ymin_2': 'float',
-               'ymax_2': 'float',
-               'occlusion': 'int',
-               'distance': 'int'})
 
-    file_name = 'temp_df'
-    file_name = file_name + '_' + valid_or_test + '_' + str(epoch) + '.csv'
-    print(file_name)
-    df.to_csv(file_name, index=False)
 
 
     return

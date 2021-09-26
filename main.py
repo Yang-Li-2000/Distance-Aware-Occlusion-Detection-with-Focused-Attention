@@ -237,11 +237,11 @@ def main(args):
         if args.distributed:
             sampler_train.set_epoch(epoch)
 
-        # # Train
-        # train_stats = train_one_epoch(
-        #     args, model, criterion, data_loader_train, optimizer, device, epoch,
-        #     args.clip_max_norm)
-        # lr_scheduler.step()
+        # Train
+        train_stats = train_one_epoch(
+            args, model, criterion, data_loader_train, optimizer, device, epoch,
+            args.clip_max_norm)
+        lr_scheduler.step()
 
         # Validate
         with torch.no_grad():
@@ -252,11 +252,11 @@ def main(args):
         with torch.no_grad():
             validate(args, 'test', model, criterion, data_loader_test, optimizer,
                      device, epoch, args.clip_max_norm)
-        raise NotImplementedError()
+
         # Save Checkpoint
-        # TODO: save extra checkpoints?
         if args.output_dir:
-            checkpoint_paths = [output_dir / 'checkpoint.pth']
+            checkpoint_name = 'checkpoint_epoch_' + str(epoch) + '.pth'
+            checkpoint_paths = [output_dir / checkpoint_name]
             # extra checkpoint before LR drop and every 10 epochs
             if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % 100 == 0:
                 checkpoint_paths.append(output_dir / f'checkpoint{epoch:04}.pth')
