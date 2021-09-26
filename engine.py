@@ -191,7 +191,7 @@ def train_one_epoch(args, model: torch.nn.Module, criterion: torch.nn.Module,
 
 
 
-def validate(args, model: torch.nn.Module, criterion: torch.nn.Module,
+def validate(args, valid_or_test, model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, max_norm: float = 0):
     model.eval()
@@ -263,7 +263,7 @@ def validate(args, model: torch.nn.Module, criterion: torch.nn.Module,
                                                    distance_list,
                                                    occlusion_list)
 
-        progressBar(iteratoin_count + 1, max_num_iterations, 'Validate Progress    ')
+        progressBar(iteratoin_count + 1, max_num_iterations, valid_or_test + ' progress    ')
 
         iteratoin_count += 1
 
@@ -272,10 +272,10 @@ def validate(args, model: torch.nn.Module, criterion: torch.nn.Module,
     loss_ce = loss_ce / iteratoin_count
     loss_bbox = loss_bbox / iteratoin_count
     loss_giou = loss_giou / iteratoin_count
-    writer.add_scalar('Loss/valid', loss, epoch)
-    writer.add_scalar('loss_ce/valid', loss_ce, epoch)
-    writer.add_scalar('loss_bbox/valid', loss_bbox, epoch)
-    writer.add_scalar('loss_giou/valid', loss_giou, epoch)
+    writer.add_scalar('Loss/' + valid_or_test, loss, epoch)
+    writer.add_scalar('loss_ce/' + valid_or_test, loss_ce, epoch)
+    writer.add_scalar('loss_bbox/' + valid_or_test, loss_bbox, epoch)
+    writer.add_scalar('loss_giou/' + valid_or_test, loss_giou, epoch)
 
     # Write Evaluation Outputs to Disk
     df = pd.DataFrame({'image_id_1': image_id_1_list,
@@ -294,8 +294,23 @@ def validate(args, model: torch.nn.Module, criterion: torch.nn.Module,
                        'distance': distance_list,
                        })
 
+    df.astype({'image_id_1': 'str',
+               'entity_1': 'str',
+               'xmin_1': 'float',
+               'xmax_1': 'float',
+               'ymin_1': 'float',
+               'ymax_1': 'float',
+               'image_id_2': 'str',
+               'entity_2': 'str',
+               'xmin_2': 'float',
+               'xmax_2': 'float',
+               'ymin_2': 'float',
+               'ymax_2': 'float',
+               'occlusion': 'int',
+               'distance': 'int'})
+
     file_name = 'temp_df'
-    file_name = file_name + '_valid_epoch_' + str(epoch) + '.csv'
+    file_name = file_name + '_' + valid_or_test + '_' + str(epoch) + '.csv'
     print(file_name)
     df.to_csv(file_name, index=False)
 

@@ -154,13 +154,16 @@ def main(args):
 
     dataset_train = build_dataset(image_set='train', args=args)
     dataset_valid = build_dataset(image_set='valid', args=args, test_scale=800)
+    dataset_test = build_dataset(image_set='test', args=args, test_scale=800)
 
     if args.distributed:
         sampler_train = DistributedSampler(dataset_train)
         sampler_valid = DistributedSampler(dataset_valid)
+        sampler_test = DistributedSampler(dataset_test)
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
         sampler_valid = torch.utils.data.RandomSampler(dataset_valid)
+        sampler_test = torch.utils.data.RandomSampler(dataset_test)
 
     if TRAIN_ON_ONE_IMAGE:
         args.batch_size = 1
@@ -182,6 +185,13 @@ def main(args):
                                    batch_sampler=batch_sampler_valid,
                                    collate_fn=utils.collate_fn,
                                    num_workers=num_workers_validation)
+
+    batch_sampler_test = torch.utils.data.BatchSampler(sampler_test, batch_size_validation, drop_last=False)
+    data_loader_test = DataLoader(dataset_test,
+                                   batch_sampler=batch_sampler_test,
+                                   collate_fn=utils.collate_fn,
+                                   num_workers=num_workers_validation)
+
 
 
     # Load from pretrained DETR model.
@@ -227,17 +237,22 @@ def main(args):
         if args.distributed:
             sampler_train.set_epoch(epoch)
 
-        # Train
-        train_stats = train_one_epoch(
-            args, model, criterion, data_loader_train, optimizer, device, epoch,
-            args.clip_max_norm)
-        lr_scheduler.step()
+        # # Train
+        # train_stats = train_one_epoch(
+        #     args, model, criterion, data_loader_train, optimizer, device, epoch,
+        #     args.clip_max_norm)
+        # lr_scheduler.step()
 
         # Validate
         with torch.no_grad():
-            validate(args, model, criterion, data_loader_valid, optimizer,
+            validate(args, 'valid', model, criterion, data_loader_valid, optimizer,
                      device, epoch, args.clip_max_norm)
 
+        # Test
+        with torch.no_grad():
+            validate(args, 'test', model, criterion, data_loader_test, optimizer,
+                     device, epoch, args.clip_max_norm)
+        raise NotImplementedError()
         # Save Checkpoint
         # TODO: save extra checkpoints?
         if args.output_dir:
