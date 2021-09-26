@@ -113,6 +113,8 @@ def get_args_parser():
     parser.add_argument('--dist_url', default='env://', help='url used to set up distributed training')
     parser.add_argument('--swin_model', default='base_cascade',
                         choices=['base_cascade', 'tiny_cascade', 'tiny_maskrcnn', 'small_cascade', 'small_maskrcnn'])
+    parser.add_argument('--manual_lr_change', type=float)
+
     return parser
 
 
@@ -207,6 +209,10 @@ def main(args):
             optimizer.load_state_dict(checkpoint['optimizer'])
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
+        if args.manual_lr_change:
+            for g in optimizer.param_groups:
+                g['lr'] = args.manual_lr_change
+            print('Changed lr to', args.manual_lr_change)
 
 
     ############################################################################
