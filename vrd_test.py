@@ -172,6 +172,8 @@ def main(args):
             generate_evaluation_outputs(args, 'test', model, criterion, data_loader_test, optimizer,
                      device, epoch, args.clip_max_norm)
 
+        break
+
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
