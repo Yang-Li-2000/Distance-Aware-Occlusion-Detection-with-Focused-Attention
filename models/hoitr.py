@@ -27,15 +27,20 @@ num_humans = 2
 
 class HoiTR(nn.Module):
     """ This is the DETR module that performs object detection """
-    def __init__(self, backbone, transformer, num_classes, num_actions, num_queries, aux_loss=False):
+
+    def __init__(self, backbone, transformer, num_classes, num_actions,
+                 num_queries, aux_loss=False):
         """ Initializes the model.
         Parameters:
             backbone: torch module of the backbone to be used. See backbone.py
-            transformer: torch module of the transformer architecture. See transformer.py
+            transformer: torch module of the transformer architecture.
+                See transformer.py
             num_classes: number of object classes
-            num_queries: number of object queries, ie detection slot. This is the maximal number of objects
-                         DETR can detect in a single image. For COCO, we recommend 100 queries.
-            aux_loss: True if auxiliary decoding losses (loss at each decoder layer) are to be used.
+            num_queries: number of object queries, ie detection slot. This is
+                the maximal number of objects DETR can detect in a single image.
+                For COCO, we recommend 100 queries.
+            aux_loss: True if auxiliary decoding losses (loss at each decoder
+                layer) are to be used.
         """
         super().__init__()
         self.num_queries = num_queries
@@ -43,7 +48,8 @@ class HoiTR(nn.Module):
         hidden_dim = transformer.d_model
 
         self.query_embed = nn.Embedding(num_queries, hidden_dim)
-        self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim, kernel_size=1)
+        self.input_proj = nn.Conv2d(backbone.num_channels, hidden_dim,
+                                    kernel_size=1)
         self.backbone = backbone
         self.aux_loss = aux_loss
 
@@ -56,18 +62,27 @@ class HoiTR(nn.Module):
 
     def forward(self, samples: NestedTensor):
         """ The forward expects a NestedTensor, which consists of:
-               - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
-               - samples.mask: a binary mask of shape [batch_size x H x W], containing 1 on padded pixels
+               - samples.tensor: batched images, of shape
+                    [batch_size x 3 x H x W]
+               - samples.mask: a binary mask of shape [batch_size x H x W],
+                    containing 1 on padded pixels
 
             It returns a dict with the following elements:
-               - "pred_logits": the classification logits (including no-object) for all queries.
-                                Shape= [batch_size x num_queries x (num_classes + 1)]
-               - "pred_boxes": The normalized boxes coordinates for all queries, represented as
-                               (center_x, center_y, height, width). These values are normalized in [0, 1],
-                               relative to the size of each individual image (disregarding possible padding).
-                               See PostProcess for information on how to retrieve the unnormalized bounding box.
-               - "aux_outputs": Optional, only returned when auxilary losses are activated. It is a list of
-                                dictionnaries containing the two above keys for each decoder layer.
+               - "pred_logits": the classification logits (including no-object)
+                                for all queries. Shape =
+                                [batch_size x num_queries x (num_classes + 1)]
+               - "pred_boxes": The normalized boxes coordinates for all queries,
+                                represented as
+                                (center_x, center_y, height, width).
+                                These values are normalized in [0, 1],  relative
+                                to the size of each individual image
+                                (disregarding possible padding).
+                                See PostProcess for information on how to
+                                retrieve the unnormalized bounding box.
+               - "aux_outputs": Optional, only returned when auxilary losses are
+                                activated. It is a list of
+                                dictionnaries containing the two above keys
+                                for each decoder layer.
         """
         if isinstance(samples, (list, torch.Tensor)):
             samples = nested_tensor_from_tensor_list(samples)
@@ -75,7 +90,9 @@ class HoiTR(nn.Module):
 
         src, mask = features[-1].decompose()
         assert mask is not None
-        hs = self.transformer(self.input_proj(src), mask, self.query_embed.weight, pos[-1])[0]
+        hs = \
+        self.transformer(self.input_proj(src), mask, self.query_embed.weight,
+                         pos[-1])[0]
 
         human_outputs_class = self.human_cls_embed(hs)
         human_outputs_coord = self.human_box_embed(hs).sigmoid()
@@ -131,29 +148,38 @@ class HoiTR(nn.Module):
             e,
             f,
             in zip(
-            human_outputs_class[:-1],
-            human_outputs_coord[:-1],
-            object_outputs_class[:-1],
-            object_outputs_coord[:-1],
-            action_outputs_class[:-1],
-            occlusion_outputs_class[:-1]
-        )]
+                human_outputs_class[:-1],
+                human_outputs_coord[:-1],
+                object_outputs_class[:-1],
+                object_outputs_coord[:-1],
+                action_outputs_class[:-1],
+                occlusion_outputs_class[:-1]
+            )]
 
 
 class SetCriterion(nn.Module):
     """ This class computes the loss for DETR.
     The process happens in two steps:
-        1) we compute hungarian assignment between ground truth boxes and the outputs of the model
-        2) we supervise each pair of matched ground-truth / prediction (supervise class and box)
+        1) we compute hungarian assignment between ground truth boxes and the
+            outputs of the model
+        2) we supervise each pair of matched ground-truth / prediction
+            (supervise class and box)
     """
-    def __init__(self, num_classes, num_actions, matcher, weight_dict, eos_coef, losses):
+
+    def __init__(self, num_classes, num_actions, matcher, weight_dict, eos_coef,
+                 losses):
         """ Create the criterion.
         Parameters:
-            num_classes: number of object categories, omitting the special no-object category
-            matcher: module able to compute a matching between targets and proposals
-            weight_dict: dict containing as key the names of the losses and as values their relative weight.
-            eos_coef: relative classification weight applied to the no-object category
-            losses: list of all the losses to be applied. See get_loss for list of available losses.
+            num_classes: number of object categories, omitting the special
+                no-object category
+            matcher: module able to compute a matching between targets
+                and proposals
+            weight_dict: dict containing as key the names of the losses
+                and as values their relative weight.
+            eos_coef: relative classification weight applied to the
+                no-object category
+            losses: list of all the losses to be applied. See get_loss for
+                list of available losses.
         """
         super().__init__()
         self.num_classes = num_classes  # 91
@@ -179,10 +205,10 @@ class SetCriterion(nn.Module):
         occlusion_empty_weight[-1] = self.eos_coef
         self.register_buffer('occlusion_empty_weight', occlusion_empty_weight)
 
-
     def loss_labels(self, outputs, targets, indices, num_boxes, log=True):
         """Classification loss (NLL)
-        targets dicts must contain the key "labels" containing a tensor of dim [nb_target_boxes]
+        targets dicts must contain the key "labels" containing a tensor
+            of dim [nb_target_boxes]
         """
         assert 'human_pred_logits' in outputs
         assert 'object_pred_logits' in outputs
@@ -196,35 +222,51 @@ class SetCriterion(nn.Module):
 
         idx = self._get_src_permutation_idx(indices)
 
-        human_target_classes_o = torch.cat([t["human_labels"][J] for t, (_, J) in zip(targets, indices)])
-        object_target_classes_o = torch.cat([t["object_labels"][J] for t, (_, J) in zip(targets, indices)])
-        action_target_classes_o = torch.cat([t["action_labels"][J] for t, (_, J) in zip(targets, indices)])
-        occlusion_target_classes_o = torch.cat([t["occlusion_labels"][J] for t, (_, J) in zip(targets, indices)])
+        human_target_classes_o = torch.cat(
+            [t["human_labels"][J] for t, (_, J) in zip(targets, indices)])
+        object_target_classes_o = torch.cat(
+            [t["object_labels"][J] for t, (_, J) in zip(targets, indices)])
+        action_target_classes_o = torch.cat(
+            [t["action_labels"][J] for t, (_, J) in zip(targets, indices)])
+        occlusion_target_classes_o = torch.cat(
+            [t["occlusion_labels"][J] for t, (_, J) in zip(targets, indices)])
 
-        human_target_classes = torch.full(human_src_logits.shape[:2], num_humans,
-                                          dtype=torch.int64, device=human_src_logits.device)
+        human_target_classes = torch.full(human_src_logits.shape[:2],
+                                          num_humans,
+                                          dtype=torch.int64,
+                                          device=human_src_logits.device)
         human_target_classes[idx] = human_target_classes_o
 
-        object_target_classes = torch.full(object_src_logits.shape[:2], self.num_classes,
-                                           dtype=torch.int64, device=object_src_logits.device)
+        object_target_classes = torch.full(object_src_logits.shape[:2],
+                                           self.num_classes,
+                                           dtype=torch.int64,
+                                           device=object_src_logits.device)
         object_target_classes[idx] = object_target_classes_o
 
-        action_target_classes = torch.full(action_src_logits.shape[:2], self.num_actions,
-                                           dtype=torch.int64, device=action_src_logits.device)
+        action_target_classes = torch.full(action_src_logits.shape[:2],
+                                           self.num_actions,
+                                           dtype=torch.int64,
+                                           device=action_src_logits.device)
         action_target_classes[idx] = action_target_classes_o
 
-        occlusion_target_classes = torch.full(occlusion_src_logits.shape[:2], self.num_actions,
-                                           dtype=torch.int64, device=occlusion_src_logits.device)
+        occlusion_target_classes = torch.full(occlusion_src_logits.shape[:2],
+                                              self.num_actions,
+                                              dtype=torch.int64,
+                                              device=occlusion_src_logits.device)
         occlusion_target_classes[idx] = occlusion_target_classes_o
 
         human_loss_ce = F.cross_entropy(human_src_logits.transpose(1, 2),
-                                        human_target_classes, self.human_empty_weight)
+                                        human_target_classes,
+                                        self.human_empty_weight)
         object_loss_ce = F.cross_entropy(object_src_logits.transpose(1, 2),
-                                         object_target_classes, self.object_empty_weight)
+                                         object_target_classes,
+                                         self.object_empty_weight)
         action_loss_ce = F.cross_entropy(action_src_logits.transpose(1, 2),
-                                         action_target_classes, self.action_empty_weight)
-        occlusion_loss_ce = F.cross_entropy(occlusion_src_logits.transpose(1, 2),
-                                         occlusion_target_classes, self.occlusion_empty_weight)
+                                         action_target_classes,
+                                         self.action_empty_weight)
+        occlusion_loss_ce = F.cross_entropy(
+            occlusion_src_logits.transpose(1, 2),
+            occlusion_target_classes, self.occlusion_empty_weight)
 
         loss_ce = human_loss_ce + object_loss_ce + 2 * action_loss_ce + 2 * occlusion_loss_ce
         losses = {
@@ -236,37 +278,54 @@ class SetCriterion(nn.Module):
         }
 
         if log:
-            losses['class_error_action'] = 100 - accuracy(action_src_logits[idx], action_target_classes_o)[0]
-            losses['class_error_occlusion'] = 100 - accuracy(occlusion_src_logits[idx], occlusion_target_classes_o)[0]
+            losses['class_error_action'] = 100 - \
+                                           accuracy(action_src_logits[idx],
+                                                    action_target_classes_o)[0]
+            losses['class_error_occlusion'] = 100 - accuracy(
+                occlusion_src_logits[idx], occlusion_target_classes_o)[0]
         return losses
 
     @torch.no_grad()
     def loss_cardinality(self, outputs, targets, indices, num_boxes):
-        """ Compute the cardinality error, ie the absolute error in the number of predicted non-empty boxes
-        This is not really a loss, it is intended for logging purposes only. It doesn't propagate gradients
+        """ Compute the cardinality error, ie the absolute error in the
+            number of predicted non-empty boxes
+        This is not really a loss, it is intended for logging purposes only.
+            It doesn't propagate gradients
         """
         pred_logits_action = outputs['action_pred_logits']
         device_action = pred_logits_action.device
-        tgt_lengths_action = torch.as_tensor([len(v["action_labels"]) for v in targets], device=device_action)
-        # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred_action = (pred_logits_action.argmax(-1) != pred_logits_action.shape[-1] - 1).sum(1)
-        card_err_action = F.l1_loss(card_pred_action.float(), tgt_lengths_action.float())
+        tgt_lengths_action = torch.as_tensor(
+            [len(v["action_labels"]) for v in targets], device=device_action)
+        # Count the number of predictions that are NOT "no-object"
+        # (which is the last class)
+        card_pred_action = (
+                    pred_logits_action.argmax(-1) != pred_logits_action.shape[
+                -1] - 1).sum(1)
+        card_err_action = F.l1_loss(card_pred_action.float(),
+                                    tgt_lengths_action.float())
 
         pred_logits_occlusion = outputs['occlusion_pred_logits']
         device_occlusion = pred_logits_occlusion.device
-        tgt_lengths_occlusion = torch.as_tensor([len(v["occlusion_labels"]) for v in targets], device=device_occlusion)
-        # Count the number of predictions that are NOT "no-object" (which is the last class)
-        card_pred_occlusion = (pred_logits_occlusion.argmax(-1) != pred_logits_occlusion.shape[-1] - 1).sum(1)
-        card_err_occlusion = F.l1_loss(card_pred_occlusion.float(), tgt_lengths_occlusion.float())
+        tgt_lengths_occlusion = torch.as_tensor(
+            [len(v["occlusion_labels"]) for v in targets],
+            device=device_occlusion)
+        # Count the number of predictions that are NOT "no-object"
+        # (which is the last class)
+        card_pred_occlusion = (pred_logits_occlusion.argmax(-1) !=
+                               pred_logits_occlusion.shape[-1] - 1).sum(1)
+        card_err_occlusion = F.l1_loss(card_pred_occlusion.float(),
+                                       tgt_lengths_occlusion.float())
 
         losses = {'cardinality_error_action': card_err_action,
                   'cardinality_error_occlusion': card_err_occlusion}
         return losses
 
     def loss_boxes(self, outputs, targets, indices, num_boxes):
-        """Compute the losses related to the bounding boxes, the L1 regression loss and the GIoU loss
-           targets dicts must contain the key "boxes" containing a tensor of dim [nb_target_boxes, 4]
-           The target boxes are expected in format (center_x, center_y, w, h), normalized by the image size.
+        """Compute the losses related to the bounding boxes, the L1 regression
+            loss and the GIoU loss targets dicts must contain the key "boxes"
+            containing a tensor of dim [nb_target_boxes, 4] The target boxes
+            are expected in format (center_x, center_y, w, h),
+            normalized by the image size.
         """
         assert 'human_pred_boxes' in outputs
         assert 'object_pred_boxes' in outputs
@@ -274,17 +333,23 @@ class SetCriterion(nn.Module):
         idx = self._get_src_permutation_idx(indices)
 
         human_src_boxes = outputs['human_pred_boxes'][idx]
-        human_target_boxes = torch.cat([t['human_boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
+        human_target_boxes = torch.cat(
+            [t['human_boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
         object_src_boxes = outputs['object_pred_boxes'][idx]
-        object_target_boxes = torch.cat([t['object_boxes'][i] for t, (_, i) in zip(targets, indices)], dim=0)
+        object_target_boxes = torch.cat(
+            [t['object_boxes'][i] for t, (_, i) in zip(targets, indices)],
+            dim=0)
 
-        human_loss_bbox = F.l1_loss(human_src_boxes, human_target_boxes, reduction='none')
-        object_loss_bbox = F.l1_loss(object_src_boxes, object_target_boxes, reduction='none')
+        human_loss_bbox = F.l1_loss(human_src_boxes, human_target_boxes,
+                                    reduction='none')
+        object_loss_bbox = F.l1_loss(object_src_boxes, object_target_boxes,
+                                     reduction='none')
 
         losses = dict()
         losses['human_loss_bbox'] = human_loss_bbox.sum() / num_boxes
         losses['object_loss_bbox'] = object_loss_bbox.sum() / num_boxes
-        losses['loss_bbox'] = losses['human_loss_bbox'] + losses['object_loss_bbox']
+        losses['loss_bbox'] = losses['human_loss_bbox'] + losses[
+            'object_loss_bbox']
 
         human_loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
             box_ops.box_cxcywh_to_xyxy(human_src_boxes),
@@ -295,18 +360,21 @@ class SetCriterion(nn.Module):
         losses['human_loss_giou'] = human_loss_giou.sum() / num_boxes
         losses['object_loss_giou'] = object_loss_giou.sum() / num_boxes
 
-        losses['loss_giou'] = losses['human_loss_giou'] + losses['object_loss_giou']
+        losses['loss_giou'] = losses['human_loss_giou'] + losses[
+            'object_loss_giou']
         return losses
 
     def _get_src_permutation_idx(self, indices):
         # permute predictions following indices
-        batch_idx = torch.cat([torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
+        batch_idx = torch.cat(
+            [torch.full_like(src, i) for i, (src, _) in enumerate(indices)])
         src_idx = torch.cat([src for (src, _) in indices])
         return batch_idx, src_idx
 
     def _get_tgt_permutation_idx(self, indices):
         # permute targets following indices
-        batch_idx = torch.cat([torch.full_like(tgt, i) for i, (_, tgt) in enumerate(indices)])
+        batch_idx = torch.cat(
+            [torch.full_like(tgt, i) for i, (_, tgt) in enumerate(indices)])
         tgt_idx = torch.cat([tgt for (_, tgt) in indices])
         return batch_idx, tgt_idx
 
@@ -322,19 +390,25 @@ class SetCriterion(nn.Module):
     def forward(self, outputs, targets):
         """ This performs the loss computation.
         Parameters:
-             outputs: dict of tensors, see the output specification of the model for the format
+             outputs: dict of tensors, see the output specification of the
+                    model for the format
              targets: list of dicts, such that len(targets) == batch_size.
-                      The expected keys in each dict depends on the losses applied, see each loss' doc
+                      The expected keys in each dict depends on the losses
+                      applied, see each loss' doc
         """
-        outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
+        outputs_without_aux = {k: v for k, v in outputs.items() if
+                               k != 'aux_outputs'}
 
-        # Retrieve the matching between the outputs of the last layer and the targets
+        # Retrieve the matching between the outputs of the
+        # last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
 
-        # Compute the average number of target boxes accross all nodes, for normalization purposes
+        # Compute the average number of target boxes accross all nodes,
+        # for normalization purposes
         num_boxes = sum(len(t["human_labels"]) for t in targets)
 
-        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
+        num_boxes = torch.as_tensor([num_boxes], dtype=torch.float,
+                                    device=next(iter(outputs.values())).device)
         if is_dist_avail_and_initialized():
             torch.distributed.all_reduce(num_boxes)
         num_boxes = torch.clamp(num_boxes / get_world_size(), min=1).item()
@@ -342,9 +416,11 @@ class SetCriterion(nn.Module):
         # Compute all the requested losses
         losses = {}
         for loss in self.losses:
-            losses.update(self.get_loss(loss, outputs, targets, indices, num_boxes))
+            losses.update(
+                self.get_loss(loss, outputs, targets, indices, num_boxes))
 
-        # In case of auxiliary losses, we repeat this process with the output of each intermediate layer.
+        # In case of auxiliary losses, we repeat this process with the output
+        # of each intermediate layer.
         if 'aux_outputs' in outputs:
             for i, aux_outputs in enumerate(outputs['aux_outputs']):
                 indices = self.matcher(aux_outputs, targets)
@@ -353,7 +429,8 @@ class SetCriterion(nn.Module):
                     if loss == 'labels':
                         # Logging is enabled only for the last layer
                         kwargs = {'log': False}
-                    l_dict = self.get_loss(loss, aux_outputs, targets, indices, num_boxes, **kwargs)
+                    l_dict = self.get_loss(loss, aux_outputs, targets, indices,
+                                           num_boxes, **kwargs)
                     l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
                     losses.update(l_dict)
 
@@ -367,7 +444,8 @@ class MLP(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(
+            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -376,7 +454,8 @@ class MLP(nn.Module):
 
 
 def build(args):
-    assert args.dataset_file in ['hico', 'vcoco', 'hoia', 'two_point_five_vrd'], args.dataset_file
+    assert args.dataset_file in ['hico', 'vcoco', 'hoia',
+                                 'two_point_five_vrd'], args.dataset_file
     if args.dataset_file in ['hico']:
         num_classes = 91
         num_actions = 118
@@ -413,22 +492,27 @@ def build(args):
 
     matcher = build_hoi_matcher(args)
 
-    weight_dict = dict(loss_ce=1, loss_bbox=args.bbox_loss_coef, loss_giou=args.giou_loss_coef)
+    weight_dict = dict(loss_ce=1, loss_bbox=args.bbox_loss_coef,
+                       loss_giou=args.giou_loss_coef)
 
     # TODO this is a hack
     if args.aux_loss:
         aux_weight_dict = {}
         for i in range(args.dec_layers - 1):
-            aux_weight_dict.update({k + f'_{i}': v for k, v in weight_dict.items()})
+            aux_weight_dict.update(
+                {k + f'_{i}': v for k, v in weight_dict.items()})
         weight_dict.update(aux_weight_dict)
 
     losses = ['labels', 'boxes', 'cardinality']
 
-    criterion = SetCriterion(num_classes=num_classes, num_actions=num_actions, matcher=matcher,
-                             weight_dict=weight_dict, eos_coef=args.eos_coef, losses=losses)
+    criterion = SetCriterion(num_classes=num_classes, num_actions=num_actions,
+                             matcher=matcher,
+                             weight_dict=weight_dict, eos_coef=args.eos_coef,
+                             losses=losses)
     criterion.to(device)
 
     return model, criterion
+
 
 # TODO: implement optimal transport.
 #  1. (Done) cost matrix.
@@ -445,7 +529,6 @@ class OptimalTransport(nn.Module):
         self.num_queries = num_queries
         self.k = k
         self.sinkhorn = SinkhornDistance(eps=eps, max_iter=max_iter)
-
 
     def loss_cls(self, outputs, targets, training=True, log=True):
 
@@ -469,50 +552,98 @@ class OptimalTransport(nn.Module):
         num_queries = self.num_queries
         if training:
             # the first target
-            human_target_classes_1 = human_target_classes[:, 0].unsqueeze(0).T.expand(-1, num_queries)
-            object_target_classes_1 = object_target_classes[:, 0].unsqueeze(0).T.expand(-1, num_queries)
-            action_target_classes_1 = action_target_classes[:, 0].unsqueeze(0).T.expand(-1, num_queries)
-            occlusion_target_classes_1 = occlusion_target_classes[:, 0].unsqueeze(0).T.expand(-1, num_queries)
-            loss_human_classes_1 = F.cross_entropy(human_src_logits.permute(0, 2, 1), human_target_classes_1, reduction='none').unsqueeze(1)
-            loss_object_classes_1 = F.cross_entropy(object_src_logits.permute(0, 2, 1), object_target_classes_1, reduction='none').unsqueeze(1)
-            loss_action_classes_1 = F.cross_entropy(action_src_logits.permute(0, 2, 1), action_target_classes_1, reduction='none').unsqueeze(1)
-            loss_occlusion_classes_1 = F.cross_entropy(occlusion_src_logits.permute(0, 2, 1), occlusion_target_classes_1, reduction='none').unsqueeze(1)
+            human_target_classes_1 = human_target_classes[:, 0].unsqueeze(
+                0).T.expand(-1, num_queries)
+            object_target_classes_1 = object_target_classes[:, 0].unsqueeze(
+                0).T.expand(-1, num_queries)
+            action_target_classes_1 = action_target_classes[:, 0].unsqueeze(
+                0).T.expand(-1, num_queries)
+            occlusion_target_classes_1 = occlusion_target_classes[:,
+                                         0].unsqueeze(0).T.expand(-1,
+                                                                  num_queries)
+            loss_human_classes_1 = F.cross_entropy(
+                human_src_logits.permute(0, 2, 1), human_target_classes_1,
+                reduction='none').unsqueeze(1)
+            loss_object_classes_1 = F.cross_entropy(
+                object_src_logits.permute(0, 2, 1), object_target_classes_1,
+                reduction='none').unsqueeze(1)
+            loss_action_classes_1 = F.cross_entropy(
+                action_src_logits.permute(0, 2, 1), action_target_classes_1,
+                reduction='none').unsqueeze(1)
+            loss_occlusion_classes_1 = F.cross_entropy(
+                occlusion_src_logits.permute(0, 2, 1),
+                occlusion_target_classes_1, reduction='none').unsqueeze(1)
 
             # the second target
-            human_target_classes_2 = human_target_classes[:, 1].unsqueeze(0).T.expand(-1, num_queries)
-            object_target_classes_2 = object_target_classes[:, 1].unsqueeze(0).T.expand(-1, num_queries)
-            action_target_classes_2 = action_target_classes[:, 1].unsqueeze(0).T.expand(-1, num_queries)
-            occlusion_target_classes_2 = occlusion_target_classes[:, 1].unsqueeze(0).T.expand(-1, num_queries)
-            loss_human_classes_2 = F.cross_entropy(human_src_logits.permute(0, 2, 1), human_target_classes_2, reduction='none').unsqueeze(1)
-            loss_object_classes_2 = F.cross_entropy(object_src_logits.permute(0, 2, 1), object_target_classes_2, reduction='none').unsqueeze(1)
-            loss_action_classes_2 = F.cross_entropy(action_src_logits.permute(0, 2, 1), action_target_classes_2, reduction='none').unsqueeze(1)
-            loss_occlusion_classes_2 = F.cross_entropy(occlusion_src_logits.permute(0, 2, 1), occlusion_target_classes_2, reduction='none').unsqueeze(1)
+            human_target_classes_2 = human_target_classes[:, 1].unsqueeze(
+                0).T.expand(-1, num_queries)
+            object_target_classes_2 = object_target_classes[:, 1].unsqueeze(
+                0).T.expand(-1, num_queries)
+            action_target_classes_2 = action_target_classes[:, 1].unsqueeze(
+                0).T.expand(-1, num_queries)
+            occlusion_target_classes_2 = occlusion_target_classes[:,
+                                         1].unsqueeze(0).T.expand(-1,
+                                                                  num_queries)
+            loss_human_classes_2 = F.cross_entropy(
+                human_src_logits.permute(0, 2, 1), human_target_classes_2,
+                reduction='none').unsqueeze(1)
+            loss_object_classes_2 = F.cross_entropy(
+                object_src_logits.permute(0, 2, 1), object_target_classes_2,
+                reduction='none').unsqueeze(1)
+            loss_action_classes_2 = F.cross_entropy(
+                action_src_logits.permute(0, 2, 1), action_target_classes_2,
+                reduction='none').unsqueeze(1)
+            loss_occlusion_classes_2 = F.cross_entropy(
+                occlusion_src_logits.permute(0, 2, 1),
+                occlusion_target_classes_2, reduction='none').unsqueeze(1)
 
             # negative labels: background class
-            bg_human_classes = torch.ones_like(human_target_classes_2) * (human_src_logits.shape[-1] - 1)
-            bg_object_classes = torch.ones_like(object_target_classes_2) * (object_src_logits.shape[-1] - 1)
-            bg_action_classes = torch.ones_like(action_target_classes_2) * (action_src_logits.shape[-1] - 1)
-            bg_occlusion_classes = torch.ones_like(occlusion_target_classes_2) * (occlusion_src_logits.shape[-1] - 1)
+            bg_human_classes = torch.ones_like(human_target_classes_2) * (
+                        human_src_logits.shape[-1] - 1)
+            bg_object_classes = torch.ones_like(object_target_classes_2) * (
+                        object_src_logits.shape[-1] - 1)
+            bg_action_classes = torch.ones_like(action_target_classes_2) * (
+                        action_src_logits.shape[-1] - 1)
+            bg_occlusion_classes = torch.ones_like(
+                occlusion_target_classes_2) * (occlusion_src_logits.shape[
+                                                   -1] - 1)
 
-            loss_human_classes_bg = F.cross_entropy(human_src_logits.permute(0, 2, 1), bg_human_classes, reduction='none').unsqueeze(1)
-            loss_object_classes_bg = F.cross_entropy(object_src_logits.permute(0, 2, 1), bg_object_classes, reduction='none').unsqueeze(1)
-            loss_action_classes_bg = F.cross_entropy(action_src_logits.permute(0, 2, 1), bg_action_classes, reduction='none').unsqueeze(1)
-            loss_occlusion_classes_bg = F.cross_entropy(occlusion_src_logits.permute(0, 2, 1), bg_occlusion_classes, reduction='none').unsqueeze(1)
-
+            loss_human_classes_bg = F.cross_entropy(
+                human_src_logits.permute(0, 2, 1), bg_human_classes,
+                reduction='none').unsqueeze(1)
+            loss_object_classes_bg = F.cross_entropy(
+                object_src_logits.permute(0, 2, 1), bg_object_classes,
+                reduction='none').unsqueeze(1)
+            loss_action_classes_bg = F.cross_entropy(
+                action_src_logits.permute(0, 2, 1), bg_action_classes,
+                reduction='none').unsqueeze(1)
+            loss_occlusion_classes_bg = F.cross_entropy(
+                occlusion_src_logits.permute(0, 2, 1), bg_occlusion_classes,
+                reduction='none').unsqueeze(1)
 
             # combine them
-            human_loss_cls = torch.cat([loss_human_classes_1, loss_human_classes_2, loss_human_classes_bg], dim=1)
-            object_loss_cls = torch.cat([loss_object_classes_1, loss_object_classes_2, loss_object_classes_bg], dim=1)
-            action_loss_cls = torch.cat([loss_action_classes_1, loss_action_classes_2, loss_action_classes_bg], dim=1)
-            occlusion_loss_cls = torch.cat([loss_occlusion_classes_1, loss_occlusion_classes_2, loss_occlusion_classes_bg], dim=1)
+            human_loss_cls = torch.cat(
+                [loss_human_classes_1, loss_human_classes_2,
+                 loss_human_classes_bg], dim=1)
+            object_loss_cls = torch.cat(
+                [loss_object_classes_1, loss_object_classes_2,
+                 loss_object_classes_bg], dim=1)
+            action_loss_cls = torch.cat(
+                [loss_action_classes_1, loss_action_classes_2,
+                 loss_action_classes_bg], dim=1)
+            occlusion_loss_cls = torch.cat(
+                [loss_occlusion_classes_1, loss_occlusion_classes_2,
+                 loss_occlusion_classes_bg], dim=1)
 
         else:
             raise NotImplementedError
 
-        loss_cls = human_loss_cls + object_loss_cls + 2 * action_loss_cls + 2 * occlusion_loss_cls
+        loss_cls = human_loss_cls + \
+                   object_loss_cls + \
+                   2 * action_loss_cls + \
+                   2 * occlusion_loss_cls
 
         return loss_cls, human_target_classes, object_target_classes, action_target_classes, occlusion_target_classes
-
 
     def loss_reg(self, outputs, targets, training=True, log=True):
 
@@ -532,27 +663,52 @@ class OptimalTransport(nn.Module):
 
         if training:
             # the first target
-            human_target_boxes_1 = human_target_boxes[:, 0:4].unsqueeze(1).expand(-1, 100, -1)
-            object_target_boxes_1 = object_target_boxes[:, 0:4].unsqueeze(1).expand(-1, 100, -1)
+            human_target_boxes_1 = human_target_boxes[:, 0:4].unsqueeze(
+                1).expand(-1, 100, -1)
+            object_target_boxes_1 = object_target_boxes[:, 0:4].unsqueeze(
+                1).expand(-1, 100, -1)
             # loss_human_boxes_1 = F.l1_loss(human_src_boxes, human_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
             # loss_object_boxes_1 = F.l1_loss(object_src_boxes, object_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
-            human_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1,4)), box_ops.box_cxcywh_to_xyxy(human_target_boxes_1.reshape(-1,4))))).reshape(-1, num_queries).unsqueeze(1)
-            object_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1, 4)), box_ops.box_cxcywh_to_xyxy(object_target_boxes_1.reshape(-1, 4))))).reshape(-1, num_queries).unsqueeze(1)
+            human_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(
+                box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)),
+                box_ops.box_cxcywh_to_xyxy(
+                    human_target_boxes_1.reshape(-1, 4))))).reshape(-1,
+                                                                    num_queries).unsqueeze(
+                1)
+            object_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(
+                box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1, 4)),
+                box_ops.box_cxcywh_to_xyxy(
+                    object_target_boxes_1.reshape(-1, 4))))).reshape(-1,
+                                                                     num_queries).unsqueeze(
+                1)
 
             # the second target
-            human_target_boxes_2 = human_target_boxes[:, 4:].unsqueeze(1).expand(-1, 100, -1)
-            object_target_boxes_2 = object_target_boxes[:, 4:].unsqueeze(1).expand(-1, 100, -1)
+            human_target_boxes_2 = human_target_boxes[:, 4:].unsqueeze(
+                1).expand(-1, 100, -1)
+            object_target_boxes_2 = object_target_boxes[:, 4:].unsqueeze(
+                1).expand(-1, 100, -1)
             # loss_human_boxes_2 = F.l1_loss(human_src_boxes, human_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
             # loss_object_boxes_2 = F.l1_loss(object_src_boxes, object_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
-            human_loss_giou_2 = (1 - torch.diag(box_ops.generalized_box_iou(box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)), box_ops.box_cxcywh_to_xyxy(human_target_boxes_2.reshape(-1, 4))))).reshape(-1, num_queries).unsqueeze(1)
-            object_loss_giou_2 = (1 - torch.diag(box_ops.generalized_box_iou(box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1, 4)), box_ops.box_cxcywh_to_xyxy(object_target_boxes_2.reshape(-1, 4))))).reshape(-1, num_queries).unsqueeze(1)
-
+            human_loss_giou_2 = (1 - torch.diag(box_ops.generalized_box_iou(
+                box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)),
+                box_ops.box_cxcywh_to_xyxy(
+                    human_target_boxes_2.reshape(-1, 4))))).reshape(-1,
+                                                                    num_queries).unsqueeze(
+                1)
+            object_loss_giou_2 = (1 - torch.diag(box_ops.generalized_box_iou(
+                box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1, 4)),
+                box_ops.box_cxcywh_to_xyxy(
+                    object_target_boxes_2.reshape(-1, 4))))).reshape(-1,
+                                                                     num_queries).unsqueeze(
+                1)
 
             # combine them
             # human_loss_boxes = torch.cat([loss_human_boxes_1, loss_human_boxes_2], dim=1)
             # object_loss_boxes = torch.cat([loss_object_boxes_1, loss_object_boxes_2], dim=1)
-            human_loss_giou = torch.cat([human_loss_giou_1, human_loss_giou_2], dim=1)
-            object_loss_giou = torch.cat([object_loss_giou_1, object_loss_giou_2], dim=1)
+            human_loss_giou = torch.cat([human_loss_giou_1, human_loss_giou_2],
+                                        dim=1)
+            object_loss_giou = torch.cat(
+                [object_loss_giou_1, object_loss_giou_2], dim=1)
 
         else:
             raise NotImplementedError()
@@ -561,14 +717,17 @@ class OptimalTransport(nn.Module):
 
         return loss_reg, human_target_boxes, object_target_boxes
 
-
     def forward(self, outputs, targets, training=True):
 
         with torch.no_grad():
             if training:
-                loss_cls, human_target_classes, object_target_classes, action_target_classes, occlusion_target_classes = self.loss_cls(outputs, targets)
-                loss_reg, human_target_boxes, object_target_boxes = self.loss_reg(outputs, targets)
-                loss_reg = torch.cat([loss_reg, torch.zeros_like(loss_reg)[:, 0:1, :]], dim=1)
+                loss_cls, human_target_classes, object_target_classes, \
+                action_target_classes, occlusion_target_classes \
+                    = self.loss_cls(outputs, targets)
+                loss_reg, human_target_boxes, object_target_boxes \
+                    = self.loss_reg(outputs, targets)
+                loss_reg = torch.cat(
+                    [loss_reg, torch.zeros_like(loss_reg)[:, 0:1, :]], dim=1)
                 cost_matrix = loss_cls + self.alpha * loss_reg
 
                 n = self.num_queries
@@ -598,25 +757,48 @@ class OptimalTransport(nn.Module):
                 num_human_classes = outputs['human_pred_logits'].shape[-1]
                 num_object_classes = outputs['object_pred_logits'].shape[-1]
                 num_action_classes = outputs['action_pred_logits'].shape[-1]
-                num_occlusion_classes = outputs['occlusion_pred_logits'].shape[-1]
+                num_occlusion_classes = outputs['occlusion_pred_logits'].shape[
+                    -1]
 
-                gt_human_classes = torch.ones([batch_size, self.num_queries], dtype=int, device=cost_matrix.device) * (num_human_classes - 1)
-                gt_object_classes = torch.ones([batch_size, self.num_queries], dtype=int, device=cost_matrix.device) * (num_object_classes - 1)
-                gt_action_classes = torch.ones([batch_size, self.num_queries], dtype=int, device=cost_matrix.device) * (num_action_classes - 1)
-                gt_occlusion_classes = torch.ones([batch_size, self.num_queries], dtype=int, device=cost_matrix.device) * (num_occlusion_classes - 1)
-                gt_human_boxes = torch.zeros([batch_size, self.num_queries, 4], device=cost_matrix.device)
-                gt_object_boxes = torch.zeros([batch_size, self.num_queries, 4], device=cost_matrix.device)
+                gt_human_classes = torch.ones([batch_size, self.num_queries],
+                                              dtype=int,
+                                              device=cost_matrix.device) * (
+                                               num_human_classes - 1)
+                gt_object_classes = torch.ones([batch_size, self.num_queries],
+                                               dtype=int,
+                                               device=cost_matrix.device) * (
+                                                num_object_classes - 1)
+                gt_action_classes = torch.ones([batch_size, self.num_queries],
+                                               dtype=int,
+                                               device=cost_matrix.device) * (
+                                                num_action_classes - 1)
+                gt_occlusion_classes = torch.ones(
+                    [batch_size, self.num_queries], dtype=int,
+                    device=cost_matrix.device) * (num_occlusion_classes - 1)
+                gt_human_boxes = torch.zeros([batch_size, self.num_queries, 4],
+                                             device=cost_matrix.device)
+                gt_object_boxes = torch.zeros([batch_size, self.num_queries, 4],
+                                              device=cost_matrix.device)
 
                 for i in range(batch_size):
-                    gt_human_classes[i][fg_mask[i]] = human_target_classes[i][matched_gt_inds[i][fg_mask[i]]]
-                    gt_object_classes[i][fg_mask[i]] = object_target_classes[i][matched_gt_inds[i][fg_mask[i]]]
-                    gt_action_classes[i][fg_mask[i]] = action_target_classes[i][matched_gt_inds[i][fg_mask[i]]]
-                    gt_occlusion_classes[i][fg_mask[i]] = occlusion_target_classes[i][matched_gt_inds[i][fg_mask[i]]]
-                    gt_human_boxes[i][fg_mask[i]] = human_target_boxes[i].reshape(2,4)[matched_gt_inds[i][fg_mask[i]]]
-                    gt_object_boxes[i][fg_mask[i]] = object_target_boxes[i].reshape(2, 4)[matched_gt_inds[i][fg_mask[i]]]
+                    gt_human_classes[i][fg_mask[i]] = human_target_classes[i][
+                        matched_gt_inds[i][fg_mask[i]]]
+                    gt_object_classes[i][fg_mask[i]] = object_target_classes[i][
+                        matched_gt_inds[i][fg_mask[i]]]
+                    gt_action_classes[i][fg_mask[i]] = action_target_classes[i][
+                        matched_gt_inds[i][fg_mask[i]]]
+                    gt_occlusion_classes[i][fg_mask[i]] = \
+                    occlusion_target_classes[i][matched_gt_inds[i][fg_mask[i]]]
+                    gt_human_boxes[i][fg_mask[i]] = \
+                    human_target_boxes[i].reshape(2, 4)[
+                        matched_gt_inds[i][fg_mask[i]]]
+                    gt_object_boxes[i][fg_mask[i]] = \
+                    object_target_boxes[i].reshape(2, 4)[
+                        matched_gt_inds[i][fg_mask[i]]]
 
             else:
-                # TODO: In the validation and test sets, number of targets for each image may vary
+                # TODO: In the validation and test sets, number of targets for
+                #  each image may vary
                 raise NotImplementedError()
 
         return gt_human_classes, gt_object_classes, gt_action_classes, gt_occlusion_classes, gt_human_boxes, gt_object_boxes
@@ -632,8 +814,9 @@ class SinkhornDistance(torch.nn.Module):
         Args:
         eps (float): regularization coefficient
         max_iter (int): maximum number of Sinkhorn iterations
-        reduction (string, optional): Specifies the reduction to apply to the output:
-          'none' | 'mean' | 'sum'.
+        reduction (string, optional):
+            Specifies the reduction to apply to the output:
+            'none' | 'mean' | 'sum'.
             'none': no reduction will be applied,
             'mean': the sum of the output will be divided by the number of
               elements in the output,
@@ -652,7 +835,7 @@ class SinkhornDistance(torch.nn.Module):
 
     def forward(self, mu, nu, C):
         '''
-        mu: supplying vector s      [m+1] (num_gt_relations + 1)    m+1 = 2 (training) or 2-454 (testing)
+        mu: supplying vector s      [m+1] (num_gt_relations + 1)
         nu: demanding vector d      [n] (num_queries)              n = 100
         C: costs matrix             [m+1, n]
 
@@ -661,16 +844,16 @@ class SinkhornDistance(torch.nn.Module):
         maximum numbers of gt relations is 454
         maximum numbers of gt objects is 22
 
-        It is expected to have the same number of predictions and ground truth relations.
-        However, there might sometimes be fewer relations in the ground truth.
+        It is expected to have the same number of predictions and ground truth
+            relations. However, there might sometimes be fewer relations
+            in the ground truth.
 
         n − m × k > 0
         n cannot be very large, so k must be very small (<1)
 
         On average, k = 0.1 seems appropriate.
-
-
-        If possible, increase num_queries so that the model can produce enough predictions.
+        If possible, increase num_queries so that the model can
+        produce enough predictions.
 
         '''
         u = torch.ones_like(mu)
@@ -680,7 +863,8 @@ class SinkhornDistance(torch.nn.Module):
         for i in range(self.max_iter):
             v = self.eps * \
                 (torch.log(
-                    nu + 1e-8) - torch.logsumexp(self.M(C, u, v).transpose(-2, -1), dim=-1)) + v
+                    nu + 1e-8) - torch.logsumexp(
+                    self.M(C, u, v).transpose(-2, -1), dim=-1)) + v
             u = self.eps * \
                 (torch.log(
                     mu + 1e-8) - torch.logsumexp(self.M(C, u, v), dim=-1)) + u
