@@ -44,7 +44,8 @@ def progressBar(i, max, text):
 
 def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Module, optimal_transport: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, max_norm: float = 0):
+                    device: torch.device, epoch: int, max_norm: float = 0,
+                    use_optimal_transport=False):
     iteratoin_count = 0
     max_num_iterations = len(data_loader)
 
@@ -122,12 +123,14 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
         targets = [{k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for t in targets]
 
         outputs = model(samples)
-        loss_dict = criterion(outputs, targets)
 
-        optimal_transport(outputs, targets)
-
-
-        weight_dict = criterion.weight_dict
+        # Loss Computation
+        if not use_optimal_transport:
+            loss_dict = criterion(outputs, targets)
+            weight_dict = criterion.weight_dict
+        else:
+            loss_dict = optimal_transport(outputs, targets)
+            weight_dict = optimal_transport.weight_dict
 
         losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
@@ -153,8 +156,12 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
         optimizer.step()
 
         metric_logger.update(loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled)
-        metric_logger.update(class_error_action=loss_dict_reduced['class_error_action'])
-        metric_logger.update(class_error_occlusion=loss_dict_reduced['class_error_occlusion'])
+        try:
+            metric_logger.update(class_error_action=loss_dict_reduced['class_error_action'])
+            metric_logger.update(class_error_occlusion=loss_dict_reduced['class_error_occlusion'])
+        except:
+            metric_logger.update(class_error_action=-1)
+            metric_logger.update(class_error_occlusion=-1)
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
         ########################################################################

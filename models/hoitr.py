@@ -523,12 +523,25 @@ def build(args):
 #  6. Loss computation
 class OptimalTransport(nn.Module):
 
-    def __init__(self, alpha=1, num_queries=100, k=10, eps=0.1, max_iter=50):
+    def __init__(self, args, alpha=1, num_queries=100, k=10, eps=0.1, max_iter=50):
         super().__init__()
         self.alpha = alpha
         self.num_queries = num_queries
         self.k = k
         self.sinkhorn = SinkhornDistance(eps=eps, max_iter=max_iter)
+
+        weight_dict = dict(loss_ce=1, loss_bbox=args.bbox_loss_coef,
+                           loss_giou=args.giou_loss_coef)
+        if args.aux_loss:
+            aux_weight_dict = {}
+            for i in range(args.dec_layers - 1):
+                aux_weight_dict.update(
+                    {k + f'_{i}': v for k, v in weight_dict.items()})
+            weight_dict.update(aux_weight_dict)
+        self.weight_dict = weight_dict
+
+        device = torch.device(args.device)
+        self.to(device)
 
     def loss_cls(self, outputs, targets, training=True, log=True):
 
@@ -717,6 +730,66 @@ class OptimalTransport(nn.Module):
 
         return loss_reg, human_target_boxes, object_target_boxes
 
+    def loss_computation(self, outputs,
+                         gt_human_classes, gt_object_classes,
+                         gt_action_classes, gt_occlusion_classes,
+                         gt_human_boxes, gt_object_boxes, log=True):
+
+        losses = dict()
+
+        # loss_ce
+        human_src_logits = outputs['human_pred_logits']
+        object_src_logits = outputs['object_pred_logits']
+        action_src_logits = outputs['action_pred_logits']
+        occlusion_src_logits = outputs['occlusion_pred_logits']
+
+        human_loss_ce = F.cross_entropy(human_src_logits.permute(0, 2, 1),
+                                        gt_human_classes)
+        object_loss_ce = F.cross_entropy(object_src_logits.permute(0, 2, 1),
+                                         gt_object_classes)
+        action_loss_ce = F.cross_entropy(action_src_logits.permute(0, 2, 1),
+                                         gt_action_classes)
+        occlusion_loss_ce = F.cross_entropy(
+            occlusion_src_logits.permute(0, 2, 1),
+            gt_occlusion_classes)
+        loss_ce = human_loss_ce + object_loss_ce + \
+                  2 * action_loss_ce + 2 * occlusion_loss_ce
+        losses['human_loss_ce'] = human_loss_ce
+        losses['object_loss_ce'] = object_loss_ce
+        losses['action_loss_ce'] = action_loss_ce
+        losses['occlusion_loss_ce'] = occlusion_loss_ce
+        losses['loss_ce'] = loss_ce
+
+        # loss_bbox
+        human_src_boxes = outputs['human_pred_boxes']
+        object_src_boxes = outputs['object_pred_boxes']
+
+        human_loss_bbox = F.l1_loss(human_src_boxes, gt_human_boxes, reduction='mean') * 4
+        object_loss_bbox = F.l1_loss(object_src_boxes, gt_object_boxes, reduction='mean') * 4
+        loss_bbox = human_loss_bbox + object_loss_bbox
+        losses['human_loss_bbox'] = human_loss_bbox
+        losses['object_loss_bbox'] = object_loss_bbox
+        losses['loss_bbox'] = loss_bbox
+
+        # loss_giou
+        human_loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
+            box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)),
+            box_ops.box_cxcywh_to_xyxy(gt_human_boxes.reshape(-1, 4)))).mean()
+        object_loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
+            box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1, 4)),
+            box_ops.box_cxcywh_to_xyxy(gt_object_boxes.reshape(-1, 4)))).mean()
+        loss_giou = human_loss_giou + object_loss_giou
+        losses['human_loss_giou'] = human_loss_giou
+        losses['object_loss_giou'] = object_loss_giou
+        losses['loss_giou'] = loss_giou
+
+        if log:
+            # Not implemented
+            pass
+
+        return losses
+
+
     def forward(self, outputs, targets, training=True):
 
         with torch.no_grad():
@@ -801,7 +874,21 @@ class OptimalTransport(nn.Module):
                 #  each image may vary
                 raise NotImplementedError()
 
-        return gt_human_classes, gt_object_classes, gt_action_classes, gt_occlusion_classes, gt_human_boxes, gt_object_boxes
+        losses = self.loss_computation(outputs, gt_human_classes,
+                                       gt_object_classes, gt_action_classes,
+                                       gt_occlusion_classes, gt_human_boxes,
+                                       gt_object_boxes)
+
+        if 'aux_outputs' in outputs:
+            for i, aux_outputs in enumerate(outputs['aux_outputs']):
+                l_dict = self.loss_computation(outputs, gt_human_classes,
+                                       gt_object_classes, gt_action_classes,
+                                       gt_occlusion_classes, gt_human_boxes,
+                                       gt_object_boxes, log=False)
+                l_dict = {k + f'_{i}': v for k, v in l_dict.items()}
+                losses.update(l_dict)
+
+        return losses
 
 
 class SinkhornDistance(torch.nn.Module):

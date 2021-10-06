@@ -31,3 +31,6 @@ batch_size_train = 5 # Not implemented yet
 
 num_workers_validation = 16 # 16
 batch_size_validation = 30  # 30
+
+
+USE_OPTIMAL_TRANSPORT = True

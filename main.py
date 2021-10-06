@@ -142,7 +142,7 @@ def main(args):
     model, criterion = build_model(args)
     model.to(device)
 
-    optimal_transport = OptimalTransport()
+    optimal_transport = OptimalTransport(args)
 
     model_without_ddp = model
     if args.distributed:
@@ -250,7 +250,7 @@ def main(args):
         # Train
         train_stats = train_one_epoch(
             args, writer, model, criterion, optimal_transport, data_loader_train, optimizer, device, epoch,
-            args.clip_max_norm)
+            args.clip_max_norm, use_optimal_transport=USE_OPTIMAL_TRANSPORT)
         lr_scheduler.step()
 
         # Validate
