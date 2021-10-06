@@ -27,6 +27,8 @@ from magic_numbers import *
 
 from torch.utils.tensorboard import SummaryWriter
 
+from models.hoitr import OptimalTransport
+
 
 
 def create_log_dir(checkpoint='checkpoint', log_path='/data/LOG/train_log'):
@@ -140,6 +142,8 @@ def main(args):
     model, criterion = build_model(args)
     model.to(device)
 
+    optimal_transport = OptimalTransport()
+
     model_without_ddp = model
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model, device_ids=[args.gpu], find_unused_parameters=True)
@@ -245,7 +249,7 @@ def main(args):
 
         # Train
         train_stats = train_one_epoch(
-            args, writer, model, criterion, data_loader_train, optimizer, device, epoch,
+            args, writer, model, criterion, optimal_transport, data_loader_train, optimizer, device, epoch,
             args.clip_max_norm)
         lr_scheduler.step()
 

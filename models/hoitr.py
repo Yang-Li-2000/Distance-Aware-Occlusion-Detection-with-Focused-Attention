@@ -235,7 +235,6 @@ class SetCriterion(nn.Module):
             'occlusion_loss_ce': occlusion_loss_ce
         }
 
-        # TODO: fix this
         if log:
             losses['class_error_action'] = 100 - accuracy(action_src_logits[idx], action_target_classes_o)[0]
             losses['class_error_occlusion'] = 100 - accuracy(occlusion_src_logits[idx], occlusion_target_classes_o)[0]
@@ -430,3 +429,274 @@ def build(args):
     criterion.to(device)
 
     return model, criterion
+
+# TODO: implement optimal transport.
+#  1. (Done) cost matrix.
+#  2. (Done) supplying vector.
+#  3. (Done) demanding vector.
+#  4. dynamic k estimation.
+#  5. (optional) center prior.
+#  6. Loss computation
+class OptimalTransport(nn.Module):
+
+    def __init__(self, alpha=1, num_queries=100, k=10, eps=0.1, max_iter=50):
+        super().__init__()
+        self.alpha = alpha
+        self.num_queries = num_queries
+        self.k = k
+        self.sinkhorn = SinkhornDistance(eps=eps, max_iter=max_iter)
+
+
+    def loss_cls(self, outputs, targets, training=True, log=True):
+
+        human_src_logits = outputs['human_pred_logits']
+        object_src_logits = outputs['object_pred_logits']
+        action_src_logits = outputs['action_pred_logits']
+        occlusion_src_logits = outputs['occlusion_pred_logits']
+
+        def store_to_list(name):
+            result = list()
+            for i in range(len(targets)):
+                result.append(targets[i][name])
+            return torch.vstack(result)
+
+        human_target_classes = store_to_list("human_labels")
+        object_target_classes = store_to_list('object_labels')
+        action_target_classes = store_to_list("action_labels")
+        occlusion_target_classes = store_to_list("occlusion_labels")
+
+        # During training, the number of relations in each image is fixed
+        num_queries = self.num_queries
+        if training:
+            # the first target
+            human_target_classes_1 = human_target_classes[:, 0].unsqueeze(0).T.expand(-1, num_queries)
+            object_target_classes_1 = object_target_classes[:, 0].unsqueeze(0).T.expand(-1, num_queries)
+            action_target_classes_1 = action_target_classes[:, 0].unsqueeze(0).T.expand(-1, num_queries)
+            occlusion_target_classes_1 = occlusion_target_classes[:, 0].unsqueeze(0).T.expand(-1, num_queries)
+            loss_human_classes_1 = F.cross_entropy(human_src_logits.permute(0, 2, 1), human_target_classes_1, reduction='none').unsqueeze(1)
+            loss_object_classes_1 = F.cross_entropy(object_src_logits.permute(0, 2, 1), object_target_classes_1, reduction='none').unsqueeze(1)
+            loss_action_classes_1 = F.cross_entropy(action_src_logits.permute(0, 2, 1), action_target_classes_1, reduction='none').unsqueeze(1)
+            loss_occlusion_classes_1 = F.cross_entropy(occlusion_src_logits.permute(0, 2, 1), occlusion_target_classes_1, reduction='none').unsqueeze(1)
+
+            # the second target
+            human_target_classes_2 = human_target_classes[:, 1].unsqueeze(0).T.expand(-1, num_queries)
+            object_target_classes_2 = object_target_classes[:, 1].unsqueeze(0).T.expand(-1, num_queries)
+            action_target_classes_2 = action_target_classes[:, 1].unsqueeze(0).T.expand(-1, num_queries)
+            occlusion_target_classes_2 = occlusion_target_classes[:, 1].unsqueeze(0).T.expand(-1, num_queries)
+            loss_human_classes_2 = F.cross_entropy(human_src_logits.permute(0, 2, 1), human_target_classes_2, reduction='none').unsqueeze(1)
+            loss_object_classes_2 = F.cross_entropy(object_src_logits.permute(0, 2, 1), object_target_classes_2, reduction='none').unsqueeze(1)
+            loss_action_classes_2 = F.cross_entropy(action_src_logits.permute(0, 2, 1), action_target_classes_2, reduction='none').unsqueeze(1)
+            loss_occlusion_classes_2 = F.cross_entropy(occlusion_src_logits.permute(0, 2, 1), occlusion_target_classes_2, reduction='none').unsqueeze(1)
+
+            # negative labels: background class
+            bg_human_classes = torch.ones_like(human_target_classes_2) * (human_src_logits.shape[-1] - 1)
+            bg_object_classes = torch.ones_like(object_target_classes_2) * (object_src_logits.shape[-1] - 1)
+            bg_action_classes = torch.ones_like(action_target_classes_2) * (action_src_logits.shape[-1] - 1)
+            bg_occlusion_classes = torch.ones_like(occlusion_target_classes_2) * (occlusion_src_logits.shape[-1] - 1)
+
+            loss_human_classes_bg = F.cross_entropy(human_src_logits.permute(0, 2, 1), bg_human_classes, reduction='none').unsqueeze(1)
+            loss_object_classes_bg = F.cross_entropy(object_src_logits.permute(0, 2, 1), bg_object_classes, reduction='none').unsqueeze(1)
+            loss_action_classes_bg = F.cross_entropy(action_src_logits.permute(0, 2, 1), bg_action_classes, reduction='none').unsqueeze(1)
+            loss_occlusion_classes_bg = F.cross_entropy(occlusion_src_logits.permute(0, 2, 1), bg_occlusion_classes, reduction='none').unsqueeze(1)
+
+
+            # combine them
+            human_loss_cls = torch.cat([loss_human_classes_1, loss_human_classes_2, loss_human_classes_bg], dim=1)
+            object_loss_cls = torch.cat([loss_object_classes_1, loss_object_classes_2, loss_object_classes_bg], dim=1)
+            action_loss_cls = torch.cat([loss_action_classes_1, loss_action_classes_2, loss_action_classes_bg], dim=1)
+            occlusion_loss_cls = torch.cat([loss_occlusion_classes_1, loss_occlusion_classes_2, loss_occlusion_classes_bg], dim=1)
+
+        else:
+            raise NotImplementedError
+
+        loss_cls = human_loss_cls + object_loss_cls + 2 * action_loss_cls + 2 * occlusion_loss_cls
+
+        return loss_cls, human_target_classes, object_target_classes, action_target_classes, occlusion_target_classes
+
+
+    def loss_reg(self, outputs, targets, training=True, log=True):
+
+        num_queries = self.num_queries
+
+        def store_to_list(name):
+            result = list()
+            for i in range(len(targets)):
+                result.append(targets[i][name].reshape(-1))
+            return torch.vstack(result)
+
+        human_src_boxes = outputs['human_pred_boxes']
+        human_target_boxes = store_to_list('human_boxes')
+
+        object_src_boxes = outputs['object_pred_boxes']
+        object_target_boxes = store_to_list('object_boxes')
+
+        if training:
+            # the first target
+            human_target_boxes_1 = human_target_boxes[:, 0:4].unsqueeze(1).expand(-1, 100, -1)
+            object_target_boxes_1 = object_target_boxes[:, 0:4].unsqueeze(1).expand(-1, 100, -1)
+            # loss_human_boxes_1 = F.l1_loss(human_src_boxes, human_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
+            # loss_object_boxes_1 = F.l1_loss(object_src_boxes, object_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
+            human_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1,4)), box_ops.box_cxcywh_to_xyxy(human_target_boxes_1.reshape(-1,4))))).reshape(-1, num_queries).unsqueeze(1)
+            object_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1, 4)), box_ops.box_cxcywh_to_xyxy(object_target_boxes_1.reshape(-1, 4))))).reshape(-1, num_queries).unsqueeze(1)
+
+            # the second target
+            human_target_boxes_2 = human_target_boxes[:, 4:].unsqueeze(1).expand(-1, 100, -1)
+            object_target_boxes_2 = object_target_boxes[:, 4:].unsqueeze(1).expand(-1, 100, -1)
+            # loss_human_boxes_2 = F.l1_loss(human_src_boxes, human_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
+            # loss_object_boxes_2 = F.l1_loss(object_src_boxes, object_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
+            human_loss_giou_2 = (1 - torch.diag(box_ops.generalized_box_iou(box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)), box_ops.box_cxcywh_to_xyxy(human_target_boxes_2.reshape(-1, 4))))).reshape(-1, num_queries).unsqueeze(1)
+            object_loss_giou_2 = (1 - torch.diag(box_ops.generalized_box_iou(box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1, 4)), box_ops.box_cxcywh_to_xyxy(object_target_boxes_2.reshape(-1, 4))))).reshape(-1, num_queries).unsqueeze(1)
+
+
+            # combine them
+            # human_loss_boxes = torch.cat([loss_human_boxes_1, loss_human_boxes_2], dim=1)
+            # object_loss_boxes = torch.cat([loss_object_boxes_1, loss_object_boxes_2], dim=1)
+            human_loss_giou = torch.cat([human_loss_giou_1, human_loss_giou_2], dim=1)
+            object_loss_giou = torch.cat([object_loss_giou_1, object_loss_giou_2], dim=1)
+
+        else:
+            raise NotImplementedError()
+
+        loss_reg = human_loss_giou + object_loss_giou
+
+        return loss_reg, human_target_boxes, object_target_boxes
+
+
+    def forward(self, outputs, targets, training=True):
+
+        with torch.no_grad():
+            if training:
+                loss_cls, human_target_classes, object_target_classes, action_target_classes, occlusion_target_classes = self.loss_cls(outputs, targets)
+                loss_reg, human_target_boxes, object_target_boxes = self.loss_reg(outputs, targets)
+                loss_reg = torch.cat([loss_reg, torch.zeros_like(loss_reg)[:, 0:1, :]], dim=1)
+                cost_matrix = loss_cls + self.alpha * loss_reg
+
+                n = self.num_queries
+                m = cost_matrix.shape[1] - 1
+                k = self.k
+
+                # supplying vector s
+                s = torch.ones(m + 1, dtype=int, device=cost_matrix.device) * -1
+                s[0:m + 1] = k
+                s[-1] = n - m * k
+
+                # demanding vector d
+                d = torch.ones(n, dtype=int, device=cost_matrix.device)
+
+                # optimal assigning plan π
+                _, pi = self.sinkhorn(s, d, cost_matrix)
+
+                # Rescale pi so that the max pi for each gt equals to 1.
+                rescale_factor, _ = pi.max(dim=2)
+                pi = pi / rescale_factor.unsqueeze(2)
+
+                # Process targets using pi
+                max_assigned_units, matched_gt_inds = torch.max(pi, dim=1)
+                fg_mask = matched_gt_inds != m
+
+                batch_size = cost_matrix.shape[0]
+                num_human_classes = outputs['human_pred_logits'].shape[-1]
+                num_object_classes = outputs['object_pred_logits'].shape[-1]
+                num_action_classes = outputs['action_pred_logits'].shape[-1]
+                num_occlusion_classes = outputs['occlusion_pred_logits'].shape[-1]
+
+                gt_human_classes = torch.ones([batch_size, self.num_queries], dtype=int, device=cost_matrix.device) * (num_human_classes - 1)
+                gt_object_classes = torch.ones([batch_size, self.num_queries], dtype=int, device=cost_matrix.device) * (num_object_classes - 1)
+                gt_action_classes = torch.ones([batch_size, self.num_queries], dtype=int, device=cost_matrix.device) * (num_action_classes - 1)
+                gt_occlusion_classes = torch.ones([batch_size, self.num_queries], dtype=int, device=cost_matrix.device) * (num_occlusion_classes - 1)
+                gt_human_boxes = torch.zeros([batch_size, self.num_queries, 4], device=cost_matrix.device)
+                gt_object_boxes = torch.zeros([batch_size, self.num_queries, 4], device=cost_matrix.device)
+
+                for i in range(batch_size):
+                    gt_human_classes[i][fg_mask[i]] = human_target_classes[i][matched_gt_inds[i][fg_mask[i]]]
+                    gt_object_classes[i][fg_mask[i]] = object_target_classes[i][matched_gt_inds[i][fg_mask[i]]]
+                    gt_action_classes[i][fg_mask[i]] = action_target_classes[i][matched_gt_inds[i][fg_mask[i]]]
+                    gt_occlusion_classes[i][fg_mask[i]] = occlusion_target_classes[i][matched_gt_inds[i][fg_mask[i]]]
+                    gt_human_boxes[i][fg_mask[i]] = human_target_boxes[i].reshape(2,4)[matched_gt_inds[i][fg_mask[i]]]
+                    gt_object_boxes[i][fg_mask[i]] = object_target_boxes[i].reshape(2, 4)[matched_gt_inds[i][fg_mask[i]]]
+
+            else:
+                # TODO: In the validation and test sets, number of targets for each image may vary
+                raise NotImplementedError()
+
+        return gt_human_classes, gt_object_classes, gt_action_classes, gt_occlusion_classes, gt_human_boxes, gt_object_boxes
+
+
+class SinkhornDistance(torch.nn.Module):
+    r"""
+        Given two empirical measures each with
+          P_1 locations x in R^{D_1} and
+          P_2 locations y in R^{D_2}`,
+        outputs an approximation of the regularized OT cost for point clouds.
+
+        Args:
+        eps (float): regularization coefficient
+        max_iter (int): maximum number of Sinkhorn iterations
+        reduction (string, optional): Specifies the reduction to apply to the output:
+          'none' | 'mean' | 'sum'.
+            'none': no reduction will be applied,
+            'mean': the sum of the output will be divided by the number of
+              elements in the output,
+            'sum': the output will be summed. Default: 'none'
+
+        Shape:
+            - Input: :math:`(N, P_1, D_1)`, :math:`(N, P_2, D_2)`
+            - Output: :math:`(N)` or :math:`()`, depending on `reduction`
+    """
+
+    def __init__(self, eps=1e-3, max_iter=100, reduction='none'):
+        super(SinkhornDistance, self).__init__()
+        self.eps = eps
+        self.max_iter = max_iter
+        self.reduction = reduction
+
+    def forward(self, mu, nu, C):
+        '''
+        mu: supplying vector s      [m+1] (num_gt_relations + 1)    m+1 = 2 (training) or 2-454 (testing)
+        nu: demanding vector d      [n] (num_queries)              n = 100
+        C: costs matrix             [m+1, n]
+
+        output shape: [m+1, n] (the same as that of cost matrix)
+
+        maximum numbers of gt relations is 454
+        maximum numbers of gt objects is 22
+
+        It is expected to have the same number of predictions and ground truth relations.
+        However, there might sometimes be fewer relations in the ground truth.
+
+        n − m × k > 0
+        n cannot be very large, so k must be very small (<1)
+
+        On average, k = 0.1 seems appropriate.
+
+
+        If possible, increase num_queries so that the model can produce enough predictions.
+
+        '''
+        u = torch.ones_like(mu)
+        v = torch.ones_like(nu)
+
+        # Sinkhorn iterations
+        for i in range(self.max_iter):
+            v = self.eps * \
+                (torch.log(
+                    nu + 1e-8) - torch.logsumexp(self.M(C, u, v).transpose(-2, -1), dim=-1)) + v
+            u = self.eps * \
+                (torch.log(
+                    mu + 1e-8) - torch.logsumexp(self.M(C, u, v), dim=-1)) + u
+
+        U, V = u, v
+        # Transport plan pi = diag(a)*K*diag(b)
+        pi = torch.exp(
+            self.M(C, U, V)).detach()
+        # Sinkhorn distance
+        cost = torch.sum(
+            pi * C, dim=(-2, -1))
+        return cost, pi
+
+    def M(self, C, u, v):
+        '''
+        "Modified cost for logarithmic updates"
+        "$M_{ij} = (-c_{ij} + u_i + v_j) / epsilon$"
+        '''
+        return (-C + u.unsqueeze(-1) + v.unsqueeze(-2)) / self.eps

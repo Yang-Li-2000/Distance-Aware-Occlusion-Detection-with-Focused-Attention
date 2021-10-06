@@ -42,7 +42,7 @@ def progressBar(i, max, text):
     sys.stdout.flush()
 
 
-def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Module,
+def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Module, optimal_transport: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, max_norm: float = 0):
     iteratoin_count = 0
@@ -123,6 +123,10 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
 
         outputs = model(samples)
         loss_dict = criterion(outputs, targets)
+
+        optimal_transport(outputs, targets)
+
+
         weight_dict = criterion.weight_dict
 
         losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
