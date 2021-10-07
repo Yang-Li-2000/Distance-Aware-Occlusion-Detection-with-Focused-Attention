@@ -685,15 +685,17 @@ class OptimalTransport(nn.Module):
             human_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(
                 box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)),
                 box_ops.box_cxcywh_to_xyxy(
-                    human_target_boxes_1.reshape(-1, 4))))).reshape(-1,
-                                                                    num_queries).unsqueeze(
-                1)
+                    human_target_boxes_1.reshape(-1, 4)),
+                handle_degenerated_boxes=True)))
+            human_loss_giou_1 = \
+                human_loss_giou_1.reshape(-1, num_queries).unsqueeze(1)
+
             object_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(
                 box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1, 4)),
-                box_ops.box_cxcywh_to_xyxy(
-                    object_target_boxes_1.reshape(-1, 4))))).reshape(-1,
-                                                                     num_queries).unsqueeze(
-                1)
+                box_ops.box_cxcywh_to_xyxy(object_target_boxes_1.reshape(-1, 4)),
+                handle_degenerated_boxes=True)))
+            object_loss_giou_1 \
+                = object_loss_giou_1.reshape(-1, num_queries).unsqueeze(1)
 
             # the second target
             human_target_boxes_2 = human_target_boxes[:, 4:].unsqueeze(

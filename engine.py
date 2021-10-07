@@ -129,7 +129,16 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
             loss_dict = criterion(outputs, targets)
             weight_dict = criterion.weight_dict
         else:
-            loss_dict = optimal_transport(outputs, targets)
+            # Handle nan outputs by skipping current batch
+            try:
+                loss_dict = optimal_transport(outputs, targets)
+            except:
+                optimizer.zero_grad()
+                del samples
+                del targets
+                del original_targets
+                del outputs
+                continue
             weight_dict = optimal_transport.weight_dict
 
         losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
