@@ -224,31 +224,35 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
 
     for samples, targets in data_loader:
 
-        original_targets = targets
-        samples = samples.to(device)
-        targets = [
-            {k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for
-            t in targets]
+        try:
+            original_targets = targets
+            samples = samples.to(device)
+            targets = [
+                {k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for
+                t in targets]
 
-        outputs = model(samples)
+            outputs = model(samples)
 
-        # Compute Losses
-        loss_dict = criterion(outputs, targets)
-        weight_dict = criterion.weight_dict
-        # Reduce losses over all GPUs for logging purposes
-        loss_dict_reduced = utils.reduce_dict(loss_dict)
-        loss_dict_reduced_unscaled = {f'{k}_unscaled': v for k, v in loss_dict_reduced.items()}
-        loss_dict_reduced_scaled = {k: v * weight_dict[k] for k, v in loss_dict_reduced.items() if k in weight_dict}
-        losses_reduced_scaled = sum(loss_dict_reduced_scaled.values())
-        loss_value = losses_reduced_scaled.item()
-        loss += loss_value
-        loss_ce += loss_dict_reduced_scaled['loss_ce']
-        loss_bbox += loss_dict_reduced_scaled['loss_bbox']
-        loss_giou += loss_dict_reduced_scaled['loss_giou']
+            # Compute Losses
+            loss_dict = criterion(outputs, targets)
+            weight_dict = criterion.weight_dict
+            # Reduce losses over all GPUs for logging purposes
+            loss_dict_reduced = utils.reduce_dict(loss_dict)
+            loss_dict_reduced_unscaled = {f'{k}_unscaled': v for k, v in loss_dict_reduced.items()}
+            loss_dict_reduced_scaled = {k: v * weight_dict[k] for k, v in loss_dict_reduced.items() if k in weight_dict}
+            losses_reduced_scaled = sum(loss_dict_reduced_scaled.values())
+            loss_value = losses_reduced_scaled.item()
+            loss += loss_value
+            loss_ce += loss_dict_reduced_scaled['loss_ce']
+            loss_bbox += loss_dict_reduced_scaled['loss_bbox']
+            loss_giou += loss_dict_reduced_scaled['loss_giou']
 
-        progressBar(iteratoin_count + 1, max_num_iterations, valid_or_test + ' progress    ')
+            progressBar(iteratoin_count + 1, max_num_iterations, valid_or_test + ' progress    ')
 
-        iteratoin_count += 1
+            iteratoin_count += 1
+
+        except:
+            continue
 
     # Record Losses
     loss = loss / iteratoin_count
