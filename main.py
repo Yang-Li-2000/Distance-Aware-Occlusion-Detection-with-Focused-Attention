@@ -265,7 +265,7 @@ def main(args):
 
         # Save Checkpoint
         if args.output_dir:
-            checkpoint_name = args.experiment_name + '_checkpoint_epoch_' + str(epoch) + '.pth'
+            checkpoint_name = 'checkpoint_epoch_' + str(epoch) + '.pth'
             checkpoint_paths = [output_dir / checkpoint_name]
             # extra checkpoint before LR drop and every 10 epochs
             if (epoch + 1) % args.lr_drop == 0 or (epoch + 1) % 100 == 0:
