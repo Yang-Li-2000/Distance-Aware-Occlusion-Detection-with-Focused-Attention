@@ -37,7 +37,7 @@ def box_iou(boxes1, boxes2):
     return iou, union
 
 
-def generalized_box_iou(boxes1, boxes2, handle_degenerated_boxes=False):
+def generalized_box_iou(boxes1, boxes2, handle_degenerate_boxes=False):
     """
     Generalized IoU from https://giou.stanford.edu/
 
@@ -50,7 +50,7 @@ def generalized_box_iou(boxes1, boxes2, handle_degenerated_boxes=False):
     # so do an early check
 
     # Handle degenerated boxes in boxes1 by setting them to [0,0,0,0]
-    if handle_degenerated_boxes:
+    if handle_degenerate_boxes:
         mask = (boxes1[:, 2:] < boxes1[:, :2]).any(dim=1)
         boxes1[mask] *= 0
 
