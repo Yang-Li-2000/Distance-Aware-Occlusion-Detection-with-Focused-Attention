@@ -3,7 +3,7 @@ TRAIN_ON_ONE_IMAGE = False
 index_of_that_image = 2
 
 # Train on a subset of the complete dataset.
-USE_SMALL_ANNOTATION_FILE = False
+USE_SMALL_ANNOTATION_FILE = True
 small_annotation_file = 'small_train_combined.odgt'
 
 # Disable shuffle or not. Useful for debugging.
@@ -37,3 +37,6 @@ batch_size_validation = 30  # 30
 
 USE_OPTIMAL_TRANSPORT = True
 OT_k = 1
+
+# set this to true when using optimal transport
+HANDLE_DEGENERATE_BOXES = True
