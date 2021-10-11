@@ -13,6 +13,8 @@ USE_SEQUENTIAL_LOADER = False
 DEBUG_OUTPUTS = False
 top_k_predictions_to_print = 10
 
+TEST_COST_MATRIX = False
+
 
 # Thresholds above which generate_hoi_list_using_model_outputs() will add a hoi to hoi_list
 human_th=0
@@ -34,3 +36,4 @@ batch_size_validation = 30  # 30
 
 
 USE_OPTIMAL_TRANSPORT = True
+OT_k = 1

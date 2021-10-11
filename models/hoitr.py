@@ -8,6 +8,7 @@
 """
 DETR model and criterion classes.
 """
+import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
@@ -20,6 +21,8 @@ from util.misc import (NestedTensor, nested_tensor_from_tensor_list,
 from .backbone import build_backbone
 from .hoi_matcher import build_matcher as build_hoi_matcher
 from .transformer import build_transformer
+
+from magic_numbers import *
 
 # This will be modified by build() if train on 2.5vrd
 num_humans = 2
@@ -523,11 +526,11 @@ def build(args):
 #  6. Loss computation
 class OptimalTransport(nn.Module):
 
-    def __init__(self, args, alpha=1, num_queries=100, k=10, eps=0.1, max_iter=50):
+    def __init__(self, args, alpha=1, num_queries=100, k=1, eps=0.1, max_iter=50):
         super().__init__()
         self.alpha = alpha
         self.num_queries = num_queries
-        self.k = k
+        self.k = OT_k
         self.sinkhorn = SinkhornDistance(eps=eps, max_iter=max_iter)
 
         weight_dict = dict(loss_ce=1, loss_bbox=args.bbox_loss_coef,
@@ -680,8 +683,8 @@ class OptimalTransport(nn.Module):
                 1).expand(-1, 100, -1)
             object_target_boxes_1 = object_target_boxes[:, 0:4].unsqueeze(
                 1).expand(-1, 100, -1)
-            # loss_human_boxes_1 = F.l1_loss(human_src_boxes, human_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
-            # loss_object_boxes_1 = F.l1_loss(object_src_boxes, object_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
+            loss_human_boxes_1 = F.l1_loss(human_src_boxes, human_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
+            loss_object_boxes_1 = F.l1_loss(object_src_boxes, object_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
             human_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(
                 box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)),
                 box_ops.box_cxcywh_to_xyxy(
@@ -702,8 +705,8 @@ class OptimalTransport(nn.Module):
                 1).expand(-1, 100, -1)
             object_target_boxes_2 = object_target_boxes[:, 4:].unsqueeze(
                 1).expand(-1, 100, -1)
-            # loss_human_boxes_2 = F.l1_loss(human_src_boxes, human_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
-            # loss_object_boxes_2 = F.l1_loss(object_src_boxes, object_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
+            loss_human_boxes_2 = F.l1_loss(human_src_boxes, human_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
+            loss_object_boxes_2 = F.l1_loss(object_src_boxes, object_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
             human_loss_giou_2 = (1 - torch.diag(box_ops.generalized_box_iou(
                 box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)),
                 box_ops.box_cxcywh_to_xyxy(
@@ -718,8 +721,8 @@ class OptimalTransport(nn.Module):
                 1)
 
             # combine them
-            # human_loss_boxes = torch.cat([loss_human_boxes_1, loss_human_boxes_2], dim=1)
-            # object_loss_boxes = torch.cat([loss_object_boxes_1, loss_object_boxes_2], dim=1)
+            human_loss_boxes = torch.cat([loss_human_boxes_1, loss_human_boxes_2], dim=1)
+            object_loss_boxes = torch.cat([loss_object_boxes_1, loss_object_boxes_2], dim=1)
             human_loss_giou = torch.cat([human_loss_giou_1, human_loss_giou_2],
                                         dim=1)
             object_loss_giou = torch.cat(
@@ -728,7 +731,7 @@ class OptimalTransport(nn.Module):
         else:
             raise NotImplementedError()
 
-        loss_reg = human_loss_giou + object_loss_giou
+        loss_reg = (human_loss_giou + object_loss_giou + human_loss_boxes + object_loss_boxes) / 2
 
         return loss_reg, human_target_boxes, object_target_boxes
 
@@ -791,6 +794,101 @@ class OptimalTransport(nn.Module):
 
         return losses
 
+    def test_cost_matrix(self, outputs, targets, cost_matrix):
+
+        differences = torch.ones_like(cost_matrix) * 99999
+
+
+        for image_index in range(0, cost_matrix.shape[0]):
+            for prediction_index in range(0, cost_matrix.shape[2]):
+                for target_index in range(0, cost_matrix.shape[1] - 1):
+                    cost_from_cost_matrix = cost_matrix[image_index, target_index, prediction_index]
+
+                    human_pred_logits = outputs['human_pred_logits'][image_index][prediction_index].unsqueeze(0)
+                    target_human_labels = targets[image_index]['human_labels'][target_index].unsqueeze(0)
+                    ce_human_class = F.cross_entropy(human_pred_logits, target_human_labels)
+
+                    object_pred_logits = outputs['object_pred_logits'][image_index][prediction_index].unsqueeze(0)
+                    target_object_labels = targets[image_index]['object_labels'][target_index].unsqueeze(0)
+                    ce_object_class = F.cross_entropy(object_pred_logits, target_object_labels)
+
+                    action_pred_logits = outputs['action_pred_logits'][image_index][prediction_index].unsqueeze(0)
+                    target_action_labels = targets[image_index]['action_labels'][target_index].unsqueeze(0)
+                    ce_action_class = F.cross_entropy(action_pred_logits, target_action_labels)
+
+                    occlusion_pred_logits = outputs['occlusion_pred_logits'][image_index][prediction_index].unsqueeze(0)
+                    target_occlusion_labels = targets[image_index]['occlusion_labels'][target_index].unsqueeze(0)
+                    ce_occlusion_class = F.cross_entropy(occlusion_pred_logits, target_occlusion_labels)
+
+                    class_cost = ce_human_class + ce_object_class + 2 * ce_action_class + 2 * ce_occlusion_class
+
+                    human_pred_boxes = outputs['human_pred_boxes'][image_index][prediction_index].unsqueeze(0)
+                    target_huamn_boxes = targets[image_index]['human_boxes'][target_index].unsqueeze(0)
+                    l1_human_boxes = F.l1_loss(human_pred_boxes, target_huamn_boxes, reduction='none').sum()
+                    box1 = box_ops.box_cxcywh_to_xyxy(human_pred_boxes)
+                    box2 = box_ops.box_cxcywh_to_xyxy(target_huamn_boxes)
+                    giou_human_boxes = 1 - torch.diag(box_ops.generalized_box_iou(box1, box2))
+
+                    object_pred_boxes = outputs['object_pred_boxes'][image_index][prediction_index].unsqueeze(0)
+                    target_object_boxes = targets[image_index]['object_boxes'][target_index].unsqueeze(0)
+                    l1_object_boxes = F.l1_loss(object_pred_boxes, target_object_boxes, reduction='none').sum()
+                    box1 = box_ops.box_cxcywh_to_xyxy(object_pred_boxes)
+                    box2 = box_ops.box_cxcywh_to_xyxy(target_object_boxes)
+                    giou_object_boxes = 1 - torch.diag(box_ops.generalized_box_iou(box1, box2))
+
+                    reg_cost = giou_human_boxes + giou_object_boxes
+
+                    cost = class_cost + reg_cost
+
+                    difference = torch.abs(cost_from_cost_matrix - cost)
+
+                    differences[image_index, target_index, prediction_index] = difference
+
+
+        # Backgrounds
+        for image_index in range(0, cost_matrix.shape[0]):
+            for prediction_index in range(0, cost_matrix.shape[2]):
+
+                # dummpy target index
+                target_index = 0
+                actual_target_index = cost_matrix.shape[1] - 1
+
+                cost_from_cost_matrix = cost_matrix[image_index, actual_target_index, prediction_index]
+
+                human_pred_logits = outputs['human_pred_logits'][image_index][prediction_index].unsqueeze(0)
+                target_human_labels = targets[image_index]['human_labels'][target_index].unsqueeze(0)
+                target_human_labels = torch.ones_like(target_human_labels) * 602
+                ce_human_class = F.cross_entropy(human_pred_logits, target_human_labels)
+
+                object_pred_logits = outputs['object_pred_logits'][image_index][prediction_index].unsqueeze(0)
+                target_object_labels = targets[image_index]['object_labels'][target_index].unsqueeze(0)
+                target_object_labels = torch.ones_like(target_object_labels) * 602
+                ce_object_class = F.cross_entropy(object_pred_logits, target_object_labels)
+
+                action_pred_logits = outputs['action_pred_logits'][image_index][prediction_index].unsqueeze(0)
+                target_action_labels = targets[image_index]['action_labels'][target_index].unsqueeze(0)
+                target_action_labels = torch.ones_like(target_action_labels) * 4
+                ce_action_class = F.cross_entropy(action_pred_logits, target_action_labels)
+
+                occlusion_pred_logits = outputs['occlusion_pred_logits'][image_index][prediction_index].unsqueeze(0)
+                target_occlusion_labels = targets[image_index]['occlusion_labels'][target_index].unsqueeze(0)
+                target_occlusion_labels = torch.ones_like(target_occlusion_labels) * 4
+                ce_occlusion_class = F.cross_entropy(occlusion_pred_logits, target_occlusion_labels)
+
+                class_cost = ce_human_class + ce_object_class + 2 * ce_action_class + 2 * ce_occlusion_class
+
+
+                cost = class_cost
+
+                difference = torch.abs(cost_from_cost_matrix - cost)
+
+                differences[image_index, actual_target_index, prediction_index] = difference
+
+        return differences
+
+
+
+
 
     def forward(self, outputs, targets, training=True):
 
@@ -804,6 +902,9 @@ class OptimalTransport(nn.Module):
                 loss_reg = torch.cat(
                     [loss_reg, torch.zeros_like(loss_reg)[:, 0:1, :]], dim=1)
                 cost_matrix = loss_cls + self.alpha * loss_reg
+
+                if TEST_COST_MATRIX:
+                    differences = self.test_cost_matrix(outputs,targets,cost_matrix)
 
                 n = self.num_queries
                 m = cost_matrix.shape[1] - 1
