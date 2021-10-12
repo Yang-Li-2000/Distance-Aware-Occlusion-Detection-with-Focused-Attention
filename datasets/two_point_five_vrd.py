@@ -491,6 +491,8 @@ def build(image_set, test_scale=-1):
             annotation_file = './data/2.5vrd/' + small_annotation_file
     elif image_set == 'valid':
         annotation_file = './data/2.5vrd/annotation_valid_combined.odgt'
+        if USE_SMALL_VALID_ANNOTATION_FILE:
+            annotation_file = './data/2.5vrd/' + small_valid_annotation_file
     elif image_set == 'test':
         annotation_file = './data/2.5vrd/annotation_test_combined.odgt'
     else:

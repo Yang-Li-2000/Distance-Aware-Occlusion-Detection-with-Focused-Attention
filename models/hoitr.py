@@ -523,7 +523,7 @@ def build(args):
 #  3. (Done) demanding vector.
 #  4. dynamic k estimation.
 #  5. (optional) center prior.
-#  6. Loss computation
+#  6. (Done) Loss computation
 class OptimalTransport(nn.Module):
 
     def __init__(self, args, alpha=1, num_queries=100, k=1, eps=0.1, max_iter=50):
@@ -733,7 +733,7 @@ class OptimalTransport(nn.Module):
 
         return loss_reg, human_target_boxes, object_target_boxes
 
-    def loss_computation(self, outputs,
+    def loss_computation(self, num_foregrounds, outputs,
                          gt_human_classes, gt_object_classes,
                          gt_action_classes, gt_occlusion_classes,
                          gt_human_boxes, gt_object_boxes, log=True):
@@ -767,20 +767,25 @@ class OptimalTransport(nn.Module):
         human_src_boxes = outputs['human_pred_boxes']
         object_src_boxes = outputs['object_pred_boxes']
 
-        human_loss_bbox = F.l1_loss(human_src_boxes, gt_human_boxes, reduction='mean') * 4
-        object_loss_bbox = F.l1_loss(object_src_boxes, gt_object_boxes, reduction='mean') * 4
+        # L1 Loss. Normalized with respect to the number of foregrounds
+        human_loss_bbox = F.l1_loss(human_src_boxes, gt_human_boxes, reduction='sum') / num_foregrounds
+        object_loss_bbox = F.l1_loss(object_src_boxes, gt_object_boxes, reduction='sum') / num_foregrounds
         loss_bbox = human_loss_bbox + object_loss_bbox
         losses['human_loss_bbox'] = human_loss_bbox
         losses['object_loss_bbox'] = object_loss_bbox
         losses['loss_bbox'] = loss_bbox
 
-        # loss_giou
+        # GIoU Loss. Normalize with respect to the number of foregrounds
         human_loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
             box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)),
-            box_ops.box_cxcywh_to_xyxy(gt_human_boxes.reshape(-1, 4)))).mean()
+            box_ops.box_cxcywh_to_xyxy(gt_human_boxes.reshape(-1, 4))))
+        human_loss_giou = human_loss_giou.sum() / num_foregrounds
+
         object_loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
             box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1, 4)),
-            box_ops.box_cxcywh_to_xyxy(gt_object_boxes.reshape(-1, 4)))).mean()
+            box_ops.box_cxcywh_to_xyxy(gt_object_boxes.reshape(-1, 4))))
+        object_loss_giou = object_loss_giou.sum() / num_foregrounds
+
         loss_giou = human_loss_giou + object_loss_giou
         losses['human_loss_giou'] = human_loss_giou
         losses['object_loss_giou'] = object_loss_giou
@@ -927,6 +932,9 @@ class OptimalTransport(nn.Module):
                 max_assigned_units, matched_gt_inds = torch.max(pi, dim=1)
                 fg_mask = matched_gt_inds != m
 
+                # Normalization factor for giou and bbox
+                num_foregrounds = fg_mask.sum()
+
                 batch_size = cost_matrix.shape[0]
                 num_human_classes = outputs['human_pred_logits'].shape[-1]
                 num_object_classes = outputs['object_pred_logits'].shape[-1]
@@ -949,10 +957,10 @@ class OptimalTransport(nn.Module):
                 gt_occlusion_classes = torch.ones(
                     [batch_size, self.num_queries], dtype=int,
                     device=cost_matrix.device) * (num_occlusion_classes - 1)
-                gt_human_boxes = torch.zeros([batch_size, self.num_queries, 4],
-                                             device=cost_matrix.device)
-                gt_object_boxes = torch.zeros([batch_size, self.num_queries, 4],
-                                              device=cost_matrix.device)
+
+                # For bg classes, set target boxes the same as outputs.
+                gt_human_boxes = outputs['human_pred_boxes'].clone()
+                gt_object_boxes = outputs['object_pred_boxes'].clone()
 
                 for i in range(batch_size):
                     gt_human_classes[i][fg_mask[i]] = human_target_classes[i][
@@ -975,14 +983,14 @@ class OptimalTransport(nn.Module):
                 #  each image may vary
                 raise NotImplementedError()
 
-        losses = self.loss_computation(outputs, gt_human_classes,
+        losses = self.loss_computation(num_foregrounds, outputs, gt_human_classes,
                                        gt_object_classes, gt_action_classes,
                                        gt_occlusion_classes, gt_human_boxes,
                                        gt_object_boxes)
 
         if 'aux_outputs' in outputs:
             for i, aux_outputs in enumerate(outputs['aux_outputs']):
-                l_dict = self.loss_computation(outputs, gt_human_classes,
+                l_dict = self.loss_computation(num_foregrounds, outputs, gt_human_classes,
                                        gt_object_classes, gt_action_classes,
                                        gt_occlusion_classes, gt_human_boxes,
                                        gt_object_boxes, log=False)

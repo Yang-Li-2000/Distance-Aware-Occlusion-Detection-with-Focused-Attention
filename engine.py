@@ -222,21 +222,8 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
             t in targets]
         outputs = model(samples)
 
-        original_samples = samples
-
-        loss_dict = criterion(outputs, targets)
-
         # Compute Losses
-        try:
-            loss_dict = criterion(outputs, targets)
-            print("Success")
-        except:
-            del samples
-            del original_targets
-            del targets
-            del outputs
-            print("Skipping batch")
-            continue
+        loss_dict = criterion(outputs, targets)
 
         weight_dict = criterion.weight_dict
         # Reduce losses over all GPUs for logging purposes
@@ -250,7 +237,8 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
         loss_bbox += loss_dict_reduced_scaled['loss_bbox']
         loss_giou += loss_dict_reduced_scaled['loss_giou']
 
-        progressBar(iteratoin_count + 1, max_num_iterations, valid_or_test + ' progress    ')
+        if utils.get_rank() == 0:
+            progressBar(iteratoin_count + 1, max_num_iterations, valid_or_test + ' progress    ')
 
         iteratoin_count += 1
 

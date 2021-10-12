@@ -4,7 +4,6 @@ Utilities for bounding box manipulation and GIoU.
 """
 import torch
 from torchvision.ops.boxes import box_area
-from magic_numbers import HANDLE_DEGENERATE_BOXES
 
 
 def box_cxcywh_to_xyxy(x):
@@ -38,7 +37,7 @@ def box_iou(boxes1, boxes2):
     return iou, union
 
 
-def generalized_box_iou(boxes1, boxes2, handle_degenerate_boxes=HANDLE_DEGENERATE_BOXES):
+def generalized_box_iou(boxes1, boxes2):
     """
     Generalized IoU from https://giou.stanford.edu/
 
@@ -49,11 +48,6 @@ def generalized_box_iou(boxes1, boxes2, handle_degenerate_boxes=HANDLE_DEGENERAT
     """
     # degenerate boxes gives inf / nan results
     # so do an early check
-
-    # Handle degenerated boxes in boxes1 by setting them to [0,0,0,0]
-    if handle_degenerate_boxes:
-        mask = (boxes1[:, 2:] < boxes1[:, :2]).any(dim=1)
-        boxes1[mask] *= 0
 
     # Check degenerated boxes
     assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
