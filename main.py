@@ -253,6 +253,19 @@ def main(args):
             args.clip_max_norm, use_optimal_transport=USE_OPTIMAL_TRANSPORT)
         lr_scheduler.step()
 
+        # Save preliminary checkpoint before validating
+        if args.output_dir:
+            checkpoint_name = 'preliminary_checkpoint_epoch_' + str(epoch) + '.pth'
+            checkpoint_paths = [output_dir / checkpoint_name]
+            for checkpoint_path in checkpoint_paths:
+                utils.save_on_master({
+                    'model': model_without_ddp.state_dict(),
+                    'optimizer': optimizer.state_dict(),
+                    'lr_scheduler': lr_scheduler.state_dict(),
+                    'epoch': epoch,
+                    'args': args,
+                }, checkpoint_path)
+
         # Validate
         with torch.no_grad():
             validate(args, writer, 'valid', model, criterion, data_loader_valid, optimizer,
