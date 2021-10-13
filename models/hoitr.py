@@ -533,6 +533,10 @@ class OptimalTransport(nn.Module):
         self.k = OT_k
         self.sinkhorn = SinkhornDistance(eps=eps, max_iter=max_iter)
 
+        self.cost_class = args.set_cost_class
+        self.cost_bbox = args.set_cost_bbox
+        self.cost_giou = args.set_cost_giou
+
         weight_dict = dict(loss_ce=1, loss_bbox=args.bbox_loss_coef,
                            loss_giou=args.giou_loss_coef)
         if args.aux_loss:
@@ -654,10 +658,17 @@ class OptimalTransport(nn.Module):
         else:
             raise NotImplementedError
 
-        loss_cls = human_loss_cls + \
-                   object_loss_cls + \
-                   2 * action_loss_cls + \
-                   2 * occlusion_loss_cls
+        beta_1, beta_2 = 1.2, 1
+        alpha_h, alpha_o, alpha_r = 1, 1, 2
+
+        l_cls_h = alpha_h * self.cost_class * human_loss_cls
+        l_cls_o = alpha_o * self.cost_class * object_loss_cls
+        l_cls_r = alpha_r * self.cost_class * action_loss_cls
+        l_cls_occlusion = alpha_r * self.cost_class * occlusion_loss_cls
+
+        l_cls_all = (l_cls_h + l_cls_o + l_cls_r + l_cls_occlusion) / (alpha_h + alpha_o + alpha_r + alpha_r)
+
+        loss_cls = beta_1 * l_cls_all
 
         return loss_cls, human_target_classes, object_target_classes, action_target_classes, occlusion_target_classes
 
@@ -729,7 +740,12 @@ class OptimalTransport(nn.Module):
         else:
             raise NotImplementedError()
 
-        loss_reg = (human_loss_giou + object_loss_giou + human_loss_boxes + object_loss_boxes) / 2
+        beta_1, beta_2 = 1.2, 1
+        l_box_h = self.cost_bbox * human_loss_boxes + self.cost_giou * human_loss_giou
+        l_box_o = self.cost_bbox * object_loss_boxes + self.cost_giou * object_loss_giou
+        l_box_all = (l_box_h + l_box_o) / 2
+
+        loss_reg = beta_2 * l_box_all
 
         return loss_reg, human_target_boxes, object_target_boxes
 
@@ -746,15 +762,12 @@ class OptimalTransport(nn.Module):
         action_src_logits = outputs['action_pred_logits']
         occlusion_src_logits = outputs['occlusion_pred_logits']
 
-        human_loss_ce = F.cross_entropy(human_src_logits.permute(0, 2, 1),
-                                        gt_human_classes)
-        object_loss_ce = F.cross_entropy(object_src_logits.permute(0, 2, 1),
-                                         gt_object_classes)
-        action_loss_ce = F.cross_entropy(action_src_logits.permute(0, 2, 1),
-                                         gt_action_classes)
-        occlusion_loss_ce = F.cross_entropy(
-            occlusion_src_logits.permute(0, 2, 1),
-            gt_occlusion_classes)
+        mask = gt_human_classes != 602
+
+        human_loss_ce = F.cross_entropy(human_src_logits[mask], gt_human_classes[mask])
+        object_loss_ce = F.cross_entropy(object_src_logits[mask], gt_object_classes[mask])
+        action_loss_ce = F.cross_entropy(action_src_logits[mask], gt_action_classes[mask])
+        occlusion_loss_ce = F.cross_entropy(occlusion_src_logits[mask], gt_occlusion_classes[mask])
         loss_ce = human_loss_ce + object_loss_ce + \
                   2 * action_loss_ce + 2 * occlusion_loss_ce
         losses['human_loss_ce'] = human_loss_ce

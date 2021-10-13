@@ -272,9 +272,9 @@ def main(args):
                      device, epoch, args.clip_max_norm)
 
         # Test
-        with torch.no_grad():
-            validate(args, writer, 'test', model, criterion, data_loader_test, optimizer,
-                     device, epoch, args.clip_max_norm)
+        # with torch.no_grad():
+        #     validate(args, writer, 'test', model, criterion, data_loader_test, optimizer,
+        #              device, epoch, args.clip_max_norm)
 
         # Save Checkpoint
         if args.output_dir:

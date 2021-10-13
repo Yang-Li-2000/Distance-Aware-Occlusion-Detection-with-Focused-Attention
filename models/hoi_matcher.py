@@ -66,6 +66,7 @@ class HungarianMatcher(nn.Module):
         object_out_prob = outputs["object_pred_logits"].flatten(0, 1).softmax(-1)  # [bs * num_queries, num_classes]
         object_out_bbox = outputs["object_pred_boxes"].flatten(0, 1)  # [bs * num_queries, 4]
         action_out_prob = outputs["action_pred_logits"].flatten(0, 1).softmax(-1)  # [bs * num_queries, num_classes]
+        occlusion_out_prob = outputs["occlusion_pred_logits"].flatten(0, 1).softmax(-1)
 
         # Also concat the target labels and boxes
         human_tgt_ids = torch.cat([v["human_labels"] for v in targets])
@@ -73,6 +74,7 @@ class HungarianMatcher(nn.Module):
         object_tgt_ids = torch.cat([v["object_labels"] for v in targets])
         object_tgt_box = torch.cat([v["object_boxes"] for v in targets])
         action_tgt_ids = torch.cat([v["action_labels"] for v in targets])
+        occlusion_tgt_ids = torch.cat([v["occlusion_labels"] for v in targets])
 
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
@@ -80,6 +82,7 @@ class HungarianMatcher(nn.Module):
         human_cost_class = -human_out_prob[:, human_tgt_ids]
         object_cost_class = -object_out_prob[:, object_tgt_ids]
         action_cost_class = -action_out_prob[:, action_tgt_ids]
+        occlusion_cost_class = -occlusion_out_prob[:, occlusion_tgt_ids]
 
         # Compute the L1 cost between boxes
         human_cost_bbox = torch.cdist(human_out_bbox, human_tgt_box, p=1)
@@ -94,9 +97,10 @@ class HungarianMatcher(nn.Module):
         l_cls_h = alpha_h * self.cost_class * human_cost_class
         l_cls_o = alpha_o * self.cost_class * object_cost_class
         l_cls_r = alpha_r * self.cost_class * action_cost_class
+        l_cls_occlusion = alpha_r * self.cost_class * occlusion_cost_class
         l_box_h = self.cost_bbox * human_cost_bbox + self.cost_giou * human_cost_giou
         l_box_o = self.cost_bbox * object_cost_bbox + self.cost_giou * object_cost_giou
-        l_cls_all = (l_cls_h + l_cls_o + l_cls_r) / (alpha_h + alpha_o + alpha_r)
+        l_cls_all = (l_cls_h + l_cls_o + l_cls_r + l_cls_occlusion) / (alpha_h + alpha_o + alpha_r + alpha_r)
         l_box_all = (l_box_h + l_box_o) / 2
         C = beta_1 * l_cls_all + beta_2 * l_box_all
 

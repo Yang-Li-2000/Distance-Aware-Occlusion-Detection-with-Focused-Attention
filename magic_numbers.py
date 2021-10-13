@@ -33,7 +33,7 @@ num_workers_train = 16 # Not implemented yet
 batch_size_train = 5 # Not implemented yet
 
 
-num_workers_validation = 16 # 16
+num_workers_validation = 2 # 16
 batch_size_validation = 30  # 30
 
 
