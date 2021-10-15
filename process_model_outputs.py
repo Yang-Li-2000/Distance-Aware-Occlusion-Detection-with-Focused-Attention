@@ -4,7 +4,30 @@ from datasets.two_point_five_vrd import *
 
 
 def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
+    """
+    Generate hoi list using the outputs produced by the model after the
+        forward pass.
+    :param args: args parsed in main.py.
+        args.dataset_file should be one of 'hico', 'vcoco', 'hoia',
+        and 'two_point_five_vrd'.
+    :param outputs: outputs of the model after the forward pass.
+    :param original_targets: Original targets that have not been moved to the
+        GPU yet. These original targets contain image_id and org_size.
+    :return: A list of human-object-interactions(hois).
+        Each element in the hoi list is a dict object whose keys are
+        image_id and hoi_list.
+        image_id is the file name of the image without suffix (e.g. .jpg) .
+        hoi_list is a list that contains all pairs of hois for one image.
+        Each element in hoi_list is a pair of hoi represented by a dict object
+        which contains the the predicted boxes, scores, and names for that
+        pair of hoi.
+        Predicted boxes are in [xmin, ymin, xmax, ymax] format.
+        It is not normalized.
+    """
+
     assert args.dataset_file in ['hico', 'vcoco', 'hoia', 'two_point_five_vrd'], args.dataset_file
+
+    # Set num_classes, num_actions, and top_k for different datasets
     if args.dataset_file == 'hico':
         num_classes = 91
         num_actions = 118
