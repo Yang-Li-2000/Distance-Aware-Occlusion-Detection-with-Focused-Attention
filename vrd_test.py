@@ -1,3 +1,9 @@
+"""
+This file implements the methods to produce predictions
+on the validation and test sets and write them to files
+using model checkpoints.
+"""
+
 import argparse
 import datetime
 import getpass
@@ -6,16 +12,13 @@ import random
 import os
 import time
 from pathlib import Path
-
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, DistributedSampler
-
 import util.misc as utils
 from datasets import build_dataset
 from engine import *
 from models import build_model
-
 from magic_numbers import *
 
 
@@ -87,7 +90,6 @@ def get_args_parser():
                         help='start epoch')
     parser.add_argument('--num_workers', default=0, type=int)
 
-
     return parser
 
 
@@ -116,9 +118,7 @@ def main(args):
     sampler_valid = torch.utils.data.RandomSampler(dataset_valid)
     sampler_test = torch.utils.data.RandomSampler(dataset_test)
 
-
     # Construct validation data loader
-    # TODO: Disable shuffling for validation and test sets
     batch_sampler_valid = torch.utils.data.BatchSampler(sampler_valid, args.batch_size, drop_last=False)
     data_loader_valid = DataLoader(dataset_valid,
                                    batch_sampler=batch_sampler_valid,
@@ -130,7 +130,6 @@ def main(args):
                                    batch_sampler=batch_sampler_test,
                                    collate_fn=utils.collate_fn,
                                    num_workers=args.num_workers)
-
 
 
     # Load from pretrained DETR model.
@@ -162,18 +161,17 @@ def main(args):
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
 
-        # Validate
+        # Validation set
         with torch.no_grad():
             generate_evaluation_outputs(args, 'valid', model, criterion, data_loader_valid, optimizer,
                      device, epoch, args.clip_max_norm)
 
-        # Test
+        # Test set
         with torch.no_grad():
             generate_evaluation_outputs(args, 'test', model, criterion, data_loader_test, optimizer,
                      device, epoch, args.clip_max_norm)
 
         break
-
 
     total_time = time.time() - start_time
     total_time_str = str(datetime.timedelta(seconds=int(total_time)))
