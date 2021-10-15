@@ -11,22 +11,18 @@ Train functions used in main.py
 import math
 import sys
 from typing import Iterable
-
 import torch
-
 import util.misc as utils
-
 from magic_numbers import *
 from process_model_outputs import *
 from evaluation import *
 import pandas as pd
-
 from util.misc import is_main_process
 
 
 def progressBar(i, max, text):
     """
-    Produce a progress bar during training.
+    Print a progress bar during training.
     :param i: index of current iteration/epoch.
     :param max: max number of iterations/epochs.
     :param text: Text to print on the right of the progress bar.
@@ -46,10 +42,18 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, max_norm: float = 0,
                     use_optimal_transport=False):
+    """
+    Train the model for one epoch.
+    """
+    model.train()
+    criterion.train()
     iteratoin_count = 0
     max_num_iterations = len(data_loader)
 
     ############################################################################
+    # (For debugging purpose)
+    # Select a specific image from the training set to repeatedly train
+    # on that image if TRAIN_ON_ONE_IMAGE is set to True
     fixed_samples = None
     fixed_targets = None
     fixed_energy_list = list()
@@ -67,9 +71,7 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
                 continue
     ############################################################################
 
-    model.train()
-    criterion.train()
-
+    # Specify the states to be recorded by the metric_logger
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.10f}'))
     metric_logger.add_meter('class_error_action', utils.SmoothedValue(window_size=1, fmt='{value:.2f}'))
@@ -80,6 +82,9 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
     for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
 
         ########################################################################
+        # (For debugging purpose)
+        # Print the image_id and class labels for that specific image
+        # selected earlier above
         if TRAIN_ON_ONE_IMAGE and DEBUG_OUTPUTS:
             samples = fixed_samples
             targets = fixed_targets
@@ -92,39 +97,40 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
                   targets[0]['object_labels'].cpu().numpy())
         ########################################################################
         ########################################################################
-        # Print targets when USE_SMALL_ANNOTATION_FILE
+        # (For debugging purpose)
+        # Print targets when training on the small dataset
+        # instead of a single image if DEBUG_OUTPUTS is set to true
         if not TRAIN_ON_ONE_IMAGE and USE_SMALL_ANNOTATION_FILE and DEBUG_OUTPUTS:
             print("Iteration: ", iteratoin_count)
             print("targets:")
-
             human_labels = targets[0]['human_labels'].cpu().numpy()
             action_labels = targets[0]['action_labels'].cpu().numpy()
             object_labels = targets[0]['object_labels'].cpu().numpy()
-
             human_names = list()
             action_names = list()
             object_names = list()
-
             for i in range(len(human_labels)):
                 human_names.append(index_to_name(human_labels[i]))
                 action_names.append(distance_id_to_name[action_labels[i]])
                 object_names.append(index_to_name(object_labels[i]))
-
             print('Object A:', human_names)
             print('relation:', action_names)
             print('Object B:', object_names)
-
         ########################################################################
 
-
+        # save a copy of targets which preserve
+        # image_id and num_bounding_boxes_in_ground_truth
         original_targets = targets
 
+        # move tensors in the samples and targets to GPU and abandon objects
+        # that cannot be moved to GPU
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for t in targets]
 
+        # Forward pass
         outputs = model(samples)
 
-        # Loss Computation
+        # Loss Computation. Using either Hungarian matcher or Optimal Transport
         if not use_optimal_transport:
             loss_dict = criterion(outputs, targets)
             weight_dict = criterion.weight_dict
@@ -132,29 +138,41 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
             loss_dict = optimal_transport(outputs, targets)
             weight_dict = optimal_transport.weight_dict
 
+        # Sum up weighted losses in the loss dictionary
         losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
 
         # reduce losses over all GPUs for logging purposes
         loss_dict_reduced = utils.reduce_dict(loss_dict)
+
+        # Losses that are not weighted by the weight dict
         loss_dict_reduced_unscaled = {f'{k}_unscaled': v
                                       for k, v in loss_dict_reduced.items()}
+        # Losses that are weighted by the weighted dict
         loss_dict_reduced_scaled = {k: v * weight_dict[k]
                                     for k, v in loss_dict_reduced.items() if k in weight_dict}
-        losses_reduced_scaled = sum(loss_dict_reduced_scaled.values())
 
+        # Compute a single loss value by summing up the reduced and weighted losses
+        losses_reduced_scaled = sum(loss_dict_reduced_scaled.values())
         loss_value = losses_reduced_scaled.item()
 
+        # Raise error if the loss is infinite
         if not math.isfinite(loss_value):
             print("Loss is {}, stopping training".format(loss_value))
             print(loss_dict_reduced)
             sys.exit(1)
 
+        # zero_grad the optimizer and back-prop
         optimizer.zero_grad()
         losses.backward()
+
+        # Clip the gradients
         if max_norm > 0:
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+
+        # Step optimizer
         optimizer.step()
 
+        # Record training stats using metric_logger
         metric_logger.update(loss=loss_value, **loss_dict_reduced_scaled, **loss_dict_reduced_unscaled)
         try:
             metric_logger.update(class_error_action=loss_dict_reduced['class_error_action'])
@@ -165,6 +183,9 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
         metric_logger.update(lr=optimizer.param_groups[0]["lr"])
 
         ########################################################################
+        # (For debugging purpose)
+        # Print non-empty hoi lists if training on a single image or
+        # a small dataset and DEBUG_OUTPUTS is set to True
         if (TRAIN_ON_ONE_IMAGE or USE_SMALL_ANNOTATION_FILE) and DEBUG_OUTPUTS:
             hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets)
             if len(hoi_list) == 0:
@@ -202,6 +223,12 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
 def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, max_norm: float = 0):
+    """
+    Compute losses on the validation or test set.
+    :param valid_or_test: 'valid' or 'test'
+    :param criterion: Hungarian matcher
+    :param data_loader: data loader for the validation or test set
+    """
     model.eval()
     criterion.eval()
 
@@ -225,7 +252,9 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
         # Compute Losses
         loss_dict = criterion(outputs, targets)
 
+        # Get the weighted dict to weight different losses
         weight_dict = criterion.weight_dict
+
         # Reduce losses over all GPUs for logging purposes
         loss_dict_reduced = utils.reduce_dict(loss_dict)
         loss_dict_reduced_unscaled = {f'{k}_unscaled': v for k, v in loss_dict_reduced.items()}
@@ -237,12 +266,13 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
         loss_bbox += loss_dict_reduced_scaled['loss_bbox']
         loss_giou += loss_dict_reduced_scaled['loss_giou']
 
+        # Print a progress bar to show validation progress
         if utils.get_rank() == 0:
             progressBar(iteratoin_count + 1, max_num_iterations, valid_or_test + ' progress    ')
 
         iteratoin_count += 1
 
-    # Record Losses
+    # Record Losses to tensorboard
     loss = loss / iteratoin_count
     loss_ce = loss_ce / iteratoin_count
     loss_bbox = loss_bbox / iteratoin_count
@@ -259,6 +289,13 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
 def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, max_norm: float = 0):
+    """
+    Generate predictions on the validation or test set. Results will be saved to
+        a file named predictions_[valid_or_test]_[epoch_number].csv.
+    :param valid_or_test: Generate predictions for which dataset.
+        "valid" for the validation set. "test" for the test set.
+    """
+
     model.eval()
     criterion.eval()
 
@@ -288,6 +325,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
             {k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for
             t in targets]
 
+        # Forward pass
         outputs = model(samples)
 
         # Construct Evaluation Outputs
@@ -309,6 +347,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
                                                    distance_list,
                                                    occlusion_list)
 
+        # Print a progress bar
         progressBar(iteratoin_count + 1, max_num_iterations, valid_or_test + ' progress    ')
         iteratoin_count += 1
 
@@ -328,7 +367,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
                        'occlusion': occlusion_list,
                        'distance': distance_list,
                        })
-
+    # Make sure the data type for each column is correct
     df.astype({'image_id_1': 'str',
                'entity_1': 'str',
                'xmin_1': 'float',
@@ -344,6 +383,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
                'occlusion': 'int',
                'distance': 'int'})
 
+    # Write to file
     file_name = 'predictions'
     file_name = file_name + '_' + valid_or_test + '_' + str(epoch-1) + '.csv'
     print(file_name)
