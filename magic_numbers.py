@@ -1,8 +1,8 @@
-# Train on a specific image
+# Train on a specific image specified by the index of that image
 TRAIN_ON_ONE_IMAGE = False
 index_of_that_image = 2
 
-# Train on a subset of the complete dataset.
+# Train or validate on a subset of the complete dataset.
 USE_SMALL_ANNOTATION_FILE = False
 small_annotation_file = 'small_train_combined.odgt'
 USE_SMALL_VALID_ANNOTATION_FILE = False
@@ -15,6 +15,7 @@ USE_SEQUENTIAL_LOADER = False
 DEBUG_OUTPUTS = False
 top_k_predictions_to_print = 10
 
+# Whether to test whether the cost matrix for optimal trasport is correctly computed.
 TEST_COST_MATRIX = False
 
 
@@ -33,9 +34,12 @@ num_workers_train = 16 # Not implemented yet
 batch_size_train = 5 # Not implemented yet
 
 
+# num_workers and batch size for the validation and test sets
 num_workers_validation = 2 # 16
 batch_size_validation = 30  # 30
 
 
+# Whether to use optimal transport. If not, use the Hungarian matcher.
 USE_OPTIMAL_TRANSPORT = True
+# k in optimal transport
 OT_k = 1
