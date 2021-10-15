@@ -525,11 +525,16 @@ def build(args):
 #  5. (optional) center prior.
 #  6. (Done) Loss computation
 class OptimalTransport(nn.Module):
+    """
+    This class uses optimal transport to assign targets to queries.
+        After that, it compute the losses using the assigned targets.
+    """
 
     def __init__(self, args, alpha=1, num_queries=100, k=1, eps=0.1, max_iter=50):
         super().__init__()
         self.alpha = alpha
         self.num_queries = num_queries
+        # the number of positive anchors for each gt
         self.k = OT_k
         self.sinkhorn = SinkhornDistance(eps=eps, max_iter=max_iter)
 
@@ -550,7 +555,19 @@ class OptimalTransport(nn.Module):
         device = torch.device(args.device)
         self.to(device)
 
+    @torch.no_grad()
     def loss_cls(self, outputs, targets, training=True, log=True):
+        """
+        Compute the classification cost matrix. TODO
+        :param outputs: outputs of the model after the forward pass.
+        :param targets:
+        :param training: Whether is using the train set.
+            The training set has exactly 2 annotations for each image.
+            Validation and test sets have various numbers of annotations
+            for each image.
+        :param log: Not used.
+        :return: TODO
+        """
 
         human_src_logits = outputs['human_pred_logits']
         object_src_logits = outputs['object_pred_logits']
@@ -672,8 +689,16 @@ class OptimalTransport(nn.Module):
 
         return loss_cls, human_target_classes, object_target_classes, action_target_classes, occlusion_target_classes
 
+    @torch.no_grad()
     def loss_reg(self, outputs, targets, training=True, log=True):
-
+        """
+        TODO
+        :param outputs:
+        :param targets:
+        :param training:
+        :param log:
+        :return:
+        """
         num_queries = self.num_queries
 
         def store_to_list(name):
@@ -749,10 +774,25 @@ class OptimalTransport(nn.Module):
 
         return loss_reg, human_target_boxes, object_target_boxes
 
+
     def loss_computation(self, num_foregrounds, outputs,
                          gt_human_classes, gt_object_classes,
                          gt_action_classes, gt_occlusion_classes,
                          gt_human_boxes, gt_object_boxes, log=True):
+
+        """
+        TODO
+        :param num_foregrounds:
+        :param outputs:
+        :param gt_human_classes:
+        :param gt_object_classes:
+        :param gt_action_classes:
+        :param gt_occlusion_classes:
+        :param gt_human_boxes:
+        :param gt_object_boxes:
+        :param log:
+        :return:
+        """
 
         losses = dict()
 
@@ -907,6 +947,13 @@ class OptimalTransport(nn.Module):
 
 
     def forward(self, outputs, targets, training=True):
+        """
+        TODO
+        :param outputs:
+        :param targets:
+        :param training:
+        :return:
+        """
 
         with torch.no_grad():
             if training:
