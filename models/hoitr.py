@@ -552,6 +552,28 @@ class OptimalTransport(nn.Module):
             weight_dict.update(aux_weight_dict)
         self.weight_dict = weight_dict
 
+        # Weights for foreground classes and background classes: 1 : 0.02
+        self.eos_coef = args.eos_coef
+        num_actions = 4
+        self.num_actions = num_actions
+
+        human_empty_weight = torch.ones(num_humans + 1)
+        human_empty_weight[-1] = self.eos_coef
+        self.register_buffer('human_empty_weight', human_empty_weight)
+
+        object_empty_weight = torch.ones(num_humans + 1)
+        object_empty_weight[-1] = self.eos_coef
+        self.register_buffer('object_empty_weight', object_empty_weight)
+
+        action_empty_weight = torch.ones(num_actions + 1)
+        action_empty_weight[-1] = self.eos_coef
+        self.register_buffer('action_empty_weight', action_empty_weight)
+
+        occlusion_empty_weight = torch.ones(num_actions + 1)
+        occlusion_empty_weight[-1] = self.eos_coef
+        self.register_buffer('occlusion_empty_weight', occlusion_empty_weight)
+
+
         device = torch.device(args.device)
         self.to(device)
 
@@ -804,12 +826,11 @@ class OptimalTransport(nn.Module):
 
         mask = gt_human_classes != 602
 
-        human_loss_ce = F.cross_entropy(human_src_logits[mask], gt_human_classes[mask])
-        object_loss_ce = F.cross_entropy(object_src_logits[mask], gt_object_classes[mask])
-        action_loss_ce = F.cross_entropy(action_src_logits[mask], gt_action_classes[mask])
-        occlusion_loss_ce = F.cross_entropy(occlusion_src_logits[mask], gt_occlusion_classes[mask])
-        loss_ce = human_loss_ce + object_loss_ce + \
-                  2 * action_loss_ce + 2 * occlusion_loss_ce
+        human_loss_ce = F.cross_entropy(human_src_logits.permute(0, 2, 1), gt_human_classes, self.human_empty_weight)
+        object_loss_ce = F.cross_entropy(object_src_logits.permute(0, 2, 1), gt_object_classes, self.object_empty_weight)
+        action_loss_ce = F.cross_entropy(action_src_logits.permute(0, 2, 1), gt_action_classes, self.action_empty_weight)
+        occlusion_loss_ce = F.cross_entropy(occlusion_src_logits.permute(0, 2, 1), gt_occlusion_classes, self.occlusion_empty_weight)
+        loss_ce = human_loss_ce + object_loss_ce + 2 * action_loss_ce + 2 * occlusion_loss_ce
         losses['human_loss_ce'] = human_loss_ce
         losses['object_loss_ce'] = object_loss_ce
         losses['action_loss_ce'] = action_loss_ce
@@ -821,28 +842,23 @@ class OptimalTransport(nn.Module):
         object_src_boxes = outputs['object_pred_boxes']
 
         # L1 Loss. Normalized with respect to the number of foregrounds
-        human_loss_bbox = F.l1_loss(human_src_boxes, gt_human_boxes, reduction='sum') / num_foregrounds
-        object_loss_bbox = F.l1_loss(object_src_boxes, gt_object_boxes, reduction='sum') / num_foregrounds
-        loss_bbox = human_loss_bbox + object_loss_bbox
-        losses['human_loss_bbox'] = human_loss_bbox
-        losses['object_loss_bbox'] = object_loss_bbox
-        losses['loss_bbox'] = loss_bbox
+        num_boxes = mask.sum()
+        human_loss_bbox = F.l1_loss(human_src_boxes[mask], gt_human_boxes[mask], reduction='none')
+        object_loss_bbox = F.l1_loss(object_src_boxes[mask], gt_object_boxes[mask], reduction='none')
+        losses['human_loss_bbox'] = human_loss_bbox.sum() / num_boxes
+        losses['object_loss_bbox'] = object_loss_bbox.sum() / num_boxes
+        losses['loss_bbox'] = losses['human_loss_bbox'] + losses['object_loss_bbox']
 
         # GIoU Loss. Normalize with respect to the number of foregrounds
         human_loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
-            box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)),
-            box_ops.box_cxcywh_to_xyxy(gt_human_boxes.reshape(-1, 4))))
-        human_loss_giou = human_loss_giou.sum() / num_foregrounds
-
+            box_ops.box_cxcywh_to_xyxy(human_src_boxes[mask]),
+            box_ops.box_cxcywh_to_xyxy(gt_human_boxes[mask])))
         object_loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
-            box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1, 4)),
-            box_ops.box_cxcywh_to_xyxy(gt_object_boxes.reshape(-1, 4))))
-        object_loss_giou = object_loss_giou.sum() / num_foregrounds
-
-        loss_giou = human_loss_giou + object_loss_giou
-        losses['human_loss_giou'] = human_loss_giou
-        losses['object_loss_giou'] = object_loss_giou
-        losses['loss_giou'] = loss_giou
+            box_ops.box_cxcywh_to_xyxy(object_src_boxes[mask]),
+            box_ops.box_cxcywh_to_xyxy(gt_object_boxes[mask])))
+        losses['human_loss_giou'] = human_loss_giou.sum() / num_boxes
+        losses['object_loss_giou'] = object_loss_giou.sum() / num_boxes
+        losses['loss_giou'] = losses['human_loss_giou'] + losses['object_loss_giou']
 
         if log:
             # Not implemented
