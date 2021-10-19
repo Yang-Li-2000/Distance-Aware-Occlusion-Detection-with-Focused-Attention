@@ -273,9 +273,15 @@ def main(args):
 
     print("Start training")
     start_time = time.time()
+
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             sampler_train.set_epoch(epoch)
+        if epoch == 0:
+            # Validate before training
+            with torch.no_grad():
+                validate(args, writer, 'valid', model, criterion, data_loader_valid, optimizer,
+                         device, -1, args.clip_max_norm)
 
         # Train
         train_stats = train_one_epoch(args, writer, model,
@@ -335,6 +341,8 @@ def main(args):
 
         if args.output_dir and utils.is_main_process():
             with (output_dir / "log.txt").open("a") as f:
+                if BACK_PROP_SINKHORN_COST:
+                    log_stats = str(log_stats.items())
                 f.write(json.dumps(log_stats) + "\n")
 
     total_time = time.time() - start_time

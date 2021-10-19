@@ -43,3 +43,6 @@ batch_size_validation = 30  # 30
 USE_OPTIMAL_TRANSPORT = True
 # k in optimal transport
 OT_k = 1
+
+
+BACK_PROP_SINKHORN_COST = True

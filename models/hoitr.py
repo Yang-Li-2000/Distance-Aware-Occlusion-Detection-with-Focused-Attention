@@ -577,7 +577,7 @@ class OptimalTransport(nn.Module):
         device = torch.device(args.device)
         self.to(device)
 
-    @torch.no_grad()
+    #@torch.no_grad()
     def loss_cls(self, outputs, targets, training=True, log=True):
         """
         Compute the classification cost matrix. TODO
@@ -711,7 +711,7 @@ class OptimalTransport(nn.Module):
 
         return loss_cls, human_target_classes, object_target_classes, action_target_classes, occlusion_target_classes
 
-    @torch.no_grad()
+    #@torch.no_grad()
     def loss_reg(self, outputs, targets, training=True, log=True):
         """
         TODO
@@ -970,6 +970,38 @@ class OptimalTransport(nn.Module):
         :param training:
         :return:
         """
+
+         # Use cost matrix produced by sinkhorn for back-prop
+        if BACK_PROP_SINKHORN_COST and training:
+            cost = None
+            loss_cls, human_target_classes, object_target_classes, \
+            action_target_classes, occlusion_target_classes \
+                = self.loss_cls(outputs, targets)
+            loss_reg, human_target_boxes, object_target_boxes \
+                = self.loss_reg(outputs, targets)
+            loss_reg = torch.cat(
+                [loss_reg, torch.zeros_like(loss_reg)[:, 0:1, :]], dim=1)
+            cost_matrix = loss_cls + self.alpha * loss_reg
+
+            if TEST_COST_MATRIX:
+                differences = self.test_cost_matrix(outputs, targets, cost_matrix)
+
+            n = self.num_queries
+            m = cost_matrix.shape[1] - 1
+            k = self.k
+
+            # supplying vector s
+            s = torch.ones(m + 1, dtype=int, device=cost_matrix.device) * -1
+            s[0:m + 1] = k
+            s[-1] = n - m * k
+
+            # demanding vector d
+            d = torch.ones(n, dtype=int, device=cost_matrix.device)
+
+            # optimal assigning plan π
+            cost, pi = self.sinkhorn(s, d, cost_matrix)
+
+            return cost.sum()
 
         with torch.no_grad():
             if training:

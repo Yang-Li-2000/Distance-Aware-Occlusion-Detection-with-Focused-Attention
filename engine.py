@@ -12,12 +12,15 @@ import math
 import sys
 from typing import Iterable
 import torch
+
+import util
 import util.misc as utils
 from magic_numbers import *
 from process_model_outputs import *
 from evaluation import *
 import pandas as pd
 from util.misc import is_main_process
+import torch.distributed as dist
 
 
 def progressBar(i, max, text):
@@ -49,6 +52,59 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
     criterion.train()
     iteratoin_count = 0
     max_num_iterations = len(data_loader)
+
+
+    epoch_loss = 0
+    if use_optimal_transport and BACK_PROP_SINKHORN_COST:
+        print()
+        print("Epoch", epoch)
+
+        for samples, targets in data_loader:
+
+            # save a copy of targets which preserve
+            # image_id and num_bounding_boxes_in_ground_truth
+            original_targets = targets
+
+            # move tensors in the samples and targets to GPU and abandon objects
+            # that cannot be moved to GPU
+            samples = samples.to(device)
+            targets = [{k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for t in targets]
+
+            # Forward pass
+            outputs = model(samples)
+
+            # Loss Computation.
+            cost = optimal_transport(outputs, targets)
+            loss_value = cost
+
+            # Reduce losses over all GPUs
+            if util.misc.get_world_size() > 1:
+                dist.reduce(cost, dst=0)
+
+            # Backward pass
+            optimizer.zero_grad()
+            cost.backward()
+
+            # Gradient clip
+            if max_norm > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
+
+            # Step optimizer
+            optimizer.step()
+
+            # Record traning stats
+            epoch_loss += loss_value
+            writer.add_scalar('Loss/train', loss_value, iteratoin_count + epoch * len(data_loader))
+            iteratoin_count += 1
+            if utils.get_rank() == 0:
+                progressBar(iteratoin_count, max_num_iterations, "Training")
+
+        # compute epoch loss
+        stats = dict()
+        stats['loss'] = epoch_loss / iteratoin_count
+        print()
+
+        return stats
 
     ############################################################################
     # (For debugging purpose)
