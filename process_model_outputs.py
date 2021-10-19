@@ -95,6 +95,7 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets):
 
         keep = (act_cls.argmax(axis=1) != num_actions)
         keep = keep * (occlusion_cls.argmax(axis=1) != num_actions)
+        # TODO: this is redundant
         if args.dataset_file == 'two_point_five_vrd':
             keep = keep * (human_cls.argmax(axis=1) != num_classes)
         else:

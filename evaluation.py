@@ -51,6 +51,7 @@ def construct_evaluation_output_using_hoi_list(hoi_list, original_targets,
             distance = distance_name_to_id[current_hoi['i_name']]
             occlusion = occlusion_name_to_id[current_hoi['ocl_name']]
 
+            # TODO: record confidence level of objects to facilitate debugging
 
             assert type(image_id_1[:-4]) == str
             assert type(entity_1) == str
