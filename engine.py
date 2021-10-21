@@ -248,8 +248,8 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
         # Print non-empty hoi lists if training on a single image or
         # a small dataset and DEBUG_OUTPUTS is set to True
         if (TRAIN_ON_ONE_IMAGE or USE_SMALL_ANNOTATION_FILE) and DEBUG_OUTPUTS:
-            hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets)
-            if len(hoi_list) == 0:
+            hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets, filter=True)
+            if len(hoi_list[0]['hoi_list']) == 0:
                 print("empty hoi_list")
             else:
                 try:
@@ -390,7 +390,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
         outputs = model(samples)
 
         # Construct Evaluation Outputs
-        hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets)
+        hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets, filter=True)
         construct_evaluation_output_using_hoi_list(hoi_list,
                                                    original_targets,
                                                    image_id_1_list,

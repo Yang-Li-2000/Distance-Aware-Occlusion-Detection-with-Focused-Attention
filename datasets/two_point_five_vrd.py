@@ -234,7 +234,7 @@ def hflip(image, target):
 
 
 class RandomHorizontalFlip(object):
-    def __init__(self, p=0.5):
+    def __init__(self, p=0):
         self.p = p
 
     def __call__(self, img, target):

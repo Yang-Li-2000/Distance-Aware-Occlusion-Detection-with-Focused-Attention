@@ -29,6 +29,12 @@ occlusion_th=0
 nms_iou_human = 0.7
 nms_iou_object = 0.7
 
+# threshold in generate_hoi_list_using_model_outputs() when filter=True
+human_th_debug = 0
+object_th_debug = 0
+hoi_th_debug = 0
+occlusion_th_debug = 0
+
 
 num_workers_train = 16 # Not implemented yet
 batch_size_train = 5 # Not implemented yet
@@ -42,7 +48,7 @@ batch_size_validation = 30  # 30
 # Whether to use optimal transport. If not, use the Hungarian matcher.
 USE_OPTIMAL_TRANSPORT = True
 # k in optimal transport
-OT_k = 1
+OT_k = 10
 
 
-BACK_PROP_SINKHORN_COST = True
+BACK_PROP_SINKHORN_COST = False
