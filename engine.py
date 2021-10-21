@@ -149,8 +149,9 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
                 print(targets[0]['image_id'])
             print("targets:",
                   targets[0]['human_labels'].cpu().numpy(),
+                  targets[0]['object_labels'].cpu().numpy(),
                   targets[0]['action_labels'].cpu().numpy(),
-                  targets[0]['object_labels'].cpu().numpy())
+                  targets[0]['occlusion_labels'].cpu().numpy())
         ########################################################################
         ########################################################################
         # (For debugging purpose)
@@ -162,16 +163,20 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
             human_labels = targets[0]['human_labels'].cpu().numpy()
             action_labels = targets[0]['action_labels'].cpu().numpy()
             object_labels = targets[0]['object_labels'].cpu().numpy()
+            occlusion_labels = targets[0]['occlusion_labels'].cpu().numpy()
             human_names = list()
             action_names = list()
             object_names = list()
+            occlusion_names = list()
             for i in range(len(human_labels)):
                 human_names.append(index_to_name(human_labels[i]))
                 action_names.append(distance_id_to_name[action_labels[i]])
                 object_names.append(index_to_name(object_labels[i]))
-            print('Object A:', human_names)
-            print('relation:', action_names)
-            print('Object B:', object_names)
+                occlusion_names.append(occlusion_id_to_name[occlusion_labels[i]])
+            print('Object A: ', human_names)
+            print('Object B: ', object_names)
+            print('relation: ', action_names)
+            print('occlusion:', occlusion_names)
         ########################################################################
 
         # save a copy of targets which preserve
