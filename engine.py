@@ -127,7 +127,7 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
                 continue
     ############################################################################
 
-    # Specify the states to be recorded by the metric_logger
+    # Specify the stats to be recorded by the metric_logger
     metric_logger = utils.MetricLogger(delimiter="  ")
     metric_logger.add_meter('lr', utils.SmoothedValue(window_size=1, fmt='{value:.10f}'))
     metric_logger.add_meter('class_error_action', utils.SmoothedValue(window_size=1, fmt='{value:.2f}'))
@@ -135,7 +135,7 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
     header = 'Epoch: [{}]'.format(epoch)
     print_freq = 10
 
-    for samples, targets in metric_logger.log_every(data_loader, print_freq, header):
+    for samples, depth, targets in metric_logger.log_every(data_loader, print_freq, header):
 
         ########################################################################
         # (For debugging purpose)
@@ -191,13 +191,8 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
         # Forward pass
         outputs = model(samples)
 
-        # Loss Computation. Using either Hungarian matcher or Optimal Transport
-        if not use_optimal_transport:
-            loss_dict = criterion(outputs, targets)
-            weight_dict = criterion.weight_dict
-        else:
-            loss_dict = optimal_transport(outputs, targets)
-            weight_dict = optimal_transport.weight_dict
+        loss_dict = criterion(outputs, targets, optimal_transport=optimal_transport)
+        weight_dict = criterion.weight_dict
 
         # Sum up weighted losses in the loss dictionary
         losses = sum(loss_dict[k] * weight_dict[k] for k in loss_dict.keys() if k in weight_dict)
@@ -262,7 +257,7 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
 
         iteratoin_count += 1
 
-    # gather the stats from all processes
+    # gather stats from all processes
     metric_logger.synchronize_between_processes()
     print("Averaged stats:", metric_logger)
 
@@ -301,7 +296,7 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
     loss_bbox = 0
     loss_giou = 0
 
-    for samples, targets in data_loader:
+    for samples, depth, targets in data_loader:
 
         original_targets = targets
         samples = samples.to(device)
@@ -311,7 +306,7 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
         outputs = model(samples)
 
         # Compute Losses
-        loss_dict = criterion(outputs, targets)
+        loss_dict = criterion(outputs, targets, training=False)
 
         # Get the weighted dict to weight different losses
         weight_dict = criterion.weight_dict
@@ -412,7 +407,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
         progressBar(iteratoin_count + 1, max_num_iterations, valid_or_test + ' progress    ')
         iteratoin_count += 1
 
-    # Write Evaluation Outputs to Disk
+    # Save Evaluation Outputs to a DataFrame
     df = pd.DataFrame({'image_id_1': image_id_1_list,
                        'entity_1': entity_1_list,
                        'xmin_1': xmin_1_list,
@@ -444,7 +439,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
                'occlusion': 'int',
                'distance': 'int'})
 
-    # Write to file
+    # Write DataFrame to file
     file_name = 'predictions'
     file_name = file_name + '_' + valid_or_test + '_' + str(epoch-1) + '.csv'
     print(file_name)

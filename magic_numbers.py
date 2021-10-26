@@ -5,6 +5,7 @@ index_of_that_image = 2
 # Train or validate on a subset of the complete dataset.
 USE_SMALL_ANNOTATION_FILE = False
 small_annotation_file = 'small_train_combined.odgt'
+#small_annotation_file = 'medium_train_combined.odgt'
 USE_SMALL_VALID_ANNOTATION_FILE = False
 small_valid_annotation_file = 'small_valid_combined.odgt'
 
@@ -14,6 +15,7 @@ USE_SEQUENTIAL_LOADER = False
 # Produce debug outputs or not.
 DEBUG_OUTPUTS = False
 top_k_predictions_to_print = 10
+SAVE_IMAGES = False
 
 # Whether to test whether the cost matrix for optimal trasport is correctly computed.
 TEST_COST_MATRIX = False
@@ -46,9 +48,14 @@ batch_size_validation = 30  # 30
 
 
 # Whether to use optimal transport. If not, use the Hungarian matcher.
-USE_OPTIMAL_TRANSPORT = True
+USE_OPTIMAL_TRANSPORT = False
 # k in optimal transport
-OT_k = 10
+OT_k = 3
+# Parameters for class SinkhornDistance
+SINKHORN_MAX_ITER_eps = 0.00001 # default is 1e-3
+SINKHORN_MAX_ITER = 10000 # default is 100
 
 
 BACK_PROP_SINKHORN_COST = False
+
+

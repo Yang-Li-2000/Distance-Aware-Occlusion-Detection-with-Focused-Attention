@@ -214,8 +214,9 @@ def parse_one_gt_line(gt_line, scale=1):
     return dict(image_id=img_name, annotations=interaction_boxes)
 
 
-def hflip(image, target):
+def hflip(image, depth, target):
     flipped_image = F.hflip(image)
+    flipped_depth = F.hflip(depth)
     w, h = image.size
     target = target.copy()
     if "human_boxes" in target:
@@ -230,29 +231,31 @@ def hflip(image, target):
         boxes = target["action_boxes"]
         boxes = boxes[:, [2, 1, 0, 3]] * torch.as_tensor([-1, 1, -1, 1]) + torch.as_tensor([w, 0, w, 0])
         target["action_boxes"] = boxes
-    return flipped_image, target
+    return flipped_image, flipped_depth, target
 
 
 class RandomHorizontalFlip(object):
-    def __init__(self, p=0):
+    def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, img, target):
+    def __call__(self, img, depth, target):
         if random.random() < self.p:
-            return hflip(img, target)
-        return img, target
+            return hflip(img, depth, target)
+        return img, depth, target
 
 
 class RandomAdjustImage(object):
     def __init__(self, p=0.5):
         self.p = p
 
-    def __call__(self, img, target):
+    def __call__(self, img, depth, target):
         if random.random() < self.p:
             img = F.adjust_brightness(img, random.choice([0.8, 0.9, 1.0, 1.1, 1.2]))
+            #depth = F.adjust_brightness(depth, random.choice([0.8, 0.9, 1.0, 1.1, 1.2]))
         if random.random() < self.p:
             img = F.adjust_contrast(img, random.choice([0.8, 0.9, 1.0, 1.1, 1.2]))
-        return img, target
+            #depth = F.adjust_contrast(depth, random.choice([0.8, 0.9, 1.0, 1.1, 1.2]))
+        return img, depth, target
 
 
 class RandomSelect(object):
@@ -265,13 +268,13 @@ class RandomSelect(object):
         self.transforms2 = transforms2
         self.p = p
 
-    def __call__(self, img, target):
+    def __call__(self, img, depth, target):
         if random.random() < self.p:
-            return self.transforms1(img, target)
-        return self.transforms2(img, target)
+            return self.transforms1(img, depth, target)
+        return self.transforms2(img, depth, target)
 
 
-def resize(image, target, size, max_size=None):
+def resize(image, depth, target, size, max_size=None):
     def get_size_with_aspect_ratio(image_size, size, max_size=None):
         w, h = image_size
         if max_size is not None:
@@ -291,9 +294,10 @@ def resize(image, target, size, max_size=None):
 
     rescale_size = get_size_with_aspect_ratio(image_size=image.size, size=size, max_size=max_size)
     rescaled_image = F.resize(image, rescale_size)
+    rescaled_depth = F.resize(depth, rescale_size)
 
     if target is None:
-        return rescaled_image, None
+        return rescaled_image, rescaled_depth, None
 
     ratios = tuple(float(s) / float(s_orig) for s, s_orig in zip(rescaled_image.size, image.size))
     ratio_width, ratio_height = ratios
@@ -311,7 +315,8 @@ def resize(image, target, size, max_size=None):
         boxes = target["action_boxes"]
         scaled_boxes = boxes * torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height])
         target["action_boxes"] = scaled_boxes
-    return rescaled_image, target
+
+    return rescaled_image, rescaled_depth, target
 
 
 class RandomResize(object):
@@ -320,12 +325,14 @@ class RandomResize(object):
         self.sizes = sizes
         self.max_size = max_size
 
-    def __call__(self, img, target=None):
+    def __call__(self, img, depth, target=None):
         size = random.choice(self.sizes)
-        return resize(img, target, size, self.max_size)
+        return resize(img, depth, target, size, self.max_size)
 
-
-def crop(image, org_target, region):
+# TODO: it does not work for depth
+def crop(image, depth, org_target, region):
+    raise NotImplementedError("crop() does not work for depth")
+    cropped_depth = None
     cropped_image = F.crop(image, *region)
     target = org_target.copy()
     i, j, h, w = region
@@ -367,7 +374,7 @@ def crop(image, org_target, region):
             return image, org_target
         for field in fields:
             target[field] = target[field][keep]
-    return cropped_image, target
+    return cropped_image, cropped_depth, target
 
 
 class RandomSizeCrop(object):
@@ -375,27 +382,32 @@ class RandomSizeCrop(object):
         self.min_size = min_size
         self.max_size = max_size
 
-    def __call__(self, img: PIL.Image.Image, target: dict):
+    def __call__(self, img: PIL.Image.Image, depth: PIL.Image.Image, target: dict):
         w = random.randint(self.min_size, min(img.width, self.max_size))
         h = random.randint(self.min_size, min(img.height, self.max_size))
         region = T.RandomCrop.get_params(img, (h, w))
-        return crop(img, target, region)
+        raise NotImplementedError("RandomSizeCrop is not implemented")
+        return crop(img, depth, target, region)
 
 
 class ToTensor(object):
-    def __call__(self, img, target):
-        return torchvision.transforms.functional.to_tensor(img), target
+    def __call__(self, img, depth, target):
+        return torchvision.transforms.functional.to_tensor(img), torchvision.transforms.functional.to_tensor(depth), target
 
 
 class Normalize(object):
-    def __init__(self, mean, std):
+    def __init__(self, mean, std, depth_mean, depth_std):
         self.mean = mean
         self.std = std
+        self.depth_mean = depth_mean
+        self.depth_std = depth_std
 
-    def __call__(self, image, target):
+
+    def __call__(self, image, depth, target):
         image = torchvision.transforms.functional.normalize(image, mean=self.mean, std=self.std)
+        depth = torchvision.transforms.functional.normalize(depth, mean=self.depth_mean, std=self.depth_std)
         if target is None:
-            return image, None
+            return image, depth, None
         target = target.copy()
         h, w = image.shape[-2:]
         if "human_boxes" in target:
@@ -413,23 +425,29 @@ class Normalize(object):
             boxes = box_xyxy_to_cxcywh(boxes)
             boxes = boxes / torch.tensor([w, h, w, h], dtype=torch.float32)
             target["action_boxes"] = boxes
-        return image, target
+        return image, depth, target
 
 
 class Compose(object):
     def __init__(self, transforms):
         self.transforms = transforms
 
-    def __call__(self, image, target):
+    def __call__(self, image, depth, target):
         for t in self.transforms:
-            image, target = t(image, target)
-        return image, target
+            image, depth, target = t(image, depth, target)
+        return image, depth, target
 
 def make_hico_transforms(image_set, test_scale=-1):
     scales = [480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800]
+    # mean and std for OIDv4 training set
+    mean = [0.38582161319756497, 0.417059363143913, 0.44746641122649666]
+    std = [0.2928927708221023, 0.28587472243230755, 0.2924566717392719]
+    # mean and std for depth of training set
+    depth_mean = [0.42352728300018017, 0.42352728300018017, 0.42352728300018017]
+    depth_std = [0.29530982498913205, 0.29530982498913205, 0.29530982498913205]
     normalize = Compose([
         ToTensor(),
-        Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        Normalize(mean, std, depth_mean, depth_std),
     ])
     if image_set == 'train':
         return Compose([
@@ -439,7 +457,7 @@ def make_hico_transforms(image_set, test_scale=-1):
                 RandomResize(scales, max_size=1333),
                 Compose([
                     RandomResize([400, 500, 600]),
-                    RandomSizeCrop(384, 600),
+                    #RandomSizeCrop(384, 600),
                     RandomResize(scales, max_size=1333),
                 ])
             ),
@@ -475,9 +493,31 @@ class two_point_five_VRD(VisionDataset):
         img_path = './data/2.5vrd/images/' + self.image_folder_name + '/' + img_name
         img = cv2.imread(img_path, cv2.IMREAD_COLOR)
         img = Image.fromarray(img[:, :, ::-1]).convert('RGB')
+
+        depth_name = img_name[:-3] + 'png'
+        depth_path = './data/2.5vrd/depth/' + self.image_folder_name + '/' + depth_name
+        depth = cv2.imread(depth_path, cv2.IMREAD_COLOR)
+        depth = Image.fromarray(depth[:, :, ::-1]).convert('RGB')
+
+        # Save img and depth to temp for visualization and debugging
+        if SAVE_IMAGES:
+            img.save('temp/' + img_name[:-4] + '_img.png')
+            depth.save('temp/' + img_name[:-4] + '_depth.png')
+
         if self.transforms is not None:
-            img, target = self.transforms(img, target)
-        return img, target
+            img, depth, target = self.transforms(img, depth, target)
+
+        # Save transformed img and depth
+        if SAVE_IMAGES:
+            transformed_img = Image.fromarray((img.permute(1,2,0).numpy() * 255).astype(np.uint8))
+            transformed_img.save('temp/' + img_name[:-4] + '_img_transformed.png')
+
+            transformed_depth = Image.fromarray((depth.permute(1, 2, 0).numpy() * 255).astype(np.uint8))
+            transformed_depth.save('temp/' + img_name[:-4] + '_depth_transformed.png')
+
+        assert img.shape == depth.shape
+
+        return img, depth, target
 
     def __len__(self):
         return len(self.annotations)

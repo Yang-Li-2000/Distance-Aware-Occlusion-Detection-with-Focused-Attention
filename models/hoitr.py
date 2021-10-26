@@ -390,7 +390,7 @@ class SetCriterion(nn.Module):
         assert loss in loss_map, f'do you really want to compute {loss} loss?'
         return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)
 
-    def forward(self, outputs, targets):
+    def forward(self, outputs, targets, optimal_transport=None, training=True):
         """ This performs the loss computation.
         Parameters:
              outputs: dict of tensors, see the output specification of the
@@ -404,11 +404,18 @@ class SetCriterion(nn.Module):
 
         # Retrieve the matching between the outputs of the
         # last layer and the targets
-        indices = self.matcher(outputs_without_aux, targets)
+        if USE_OPTIMAL_TRANSPORT and training:
+            with torch.no_grad():
+                indices = OptimalTransport.forward(optimal_transport, outputs_without_aux, targets, indices_only=True)
+        else:
+            indices = self.matcher(outputs_without_aux, targets)
 
         # Compute the average number of target boxes accross all nodes,
         # for normalization purposes
-        num_boxes = sum(len(t["human_labels"]) for t in targets)
+        if USE_OPTIMAL_TRANSPORT and training:
+            num_boxes = np.sum([len(k[0]) for k in indices])
+        else:
+            num_boxes = sum(len(t["human_labels"]) for t in targets)
 
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float,
                                     device=next(iter(outputs.values())).device)
@@ -962,7 +969,7 @@ class OptimalTransport(nn.Module):
 
 
 
-    def forward(self, outputs, targets, training=True):
+    def forward(self, outputs, targets, training=True, indices_only=False):
         """
         TODO
         :param outputs:
@@ -1004,7 +1011,7 @@ class OptimalTransport(nn.Module):
             return cost.sum()
 
         with torch.no_grad():
-            if training:
+            if training or indices_only:
                 loss_cls, human_target_classes, object_target_classes, \
                 action_target_classes, occlusion_target_classes \
                     = self.loss_cls(outputs, targets)
@@ -1039,6 +1046,34 @@ class OptimalTransport(nn.Module):
                 # Process targets using pi
                 max_assigned_units, matched_gt_inds = torch.max(pi, dim=1)
                 fg_mask = matched_gt_inds != m
+
+
+                if indices_only:
+                    # Produce indices as a list of tuples
+                    # in the same format as the results produced by the Hungarian matcher
+                    image_indices, query_indices = torch.where(fg_mask)
+                    target_indices = matched_gt_inds[fg_mask]
+
+                    num_images = matched_gt_inds.shape[0]
+                    query_list = [None] * num_images
+                    target_list = [None] * num_images
+                    for i in range(num_images):
+                        query_list[i] = list()
+                        target_list[i] = list()
+                    for i in range(len(image_indices)):
+                        image_index = image_indices[i]
+                        query_list[image_index].append(query_indices[i].item())
+                        target_list[image_index].append(target_indices[i].item())
+
+                    result = [(torch.tensor(q), torch.tensor(t)) for q, t in zip(query_list, target_list)]
+
+                    return result
+
+                if not training:
+                    raise NotImplementedError()
+
+
+
 
                 # Normalization factor for giou and bbox
                 num_foregrounds = fg_mask.sum()
@@ -1131,7 +1166,7 @@ class SinkhornDistance(torch.nn.Module):
             - Output: :math:`(N)` or :math:`()`, depending on `reduction`
     """
 
-    def __init__(self, eps=1e-3, max_iter=100, reduction='none'):
+    def __init__(self, eps=SINKHORN_MAX_ITER_eps, max_iter=SINKHORN_MAX_ITER, reduction='none'):
         super(SinkhornDistance, self).__init__()
         self.eps = eps
         self.max_iter = max_iter
