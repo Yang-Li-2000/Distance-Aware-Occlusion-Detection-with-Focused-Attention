@@ -63,7 +63,7 @@ class HoiTR(nn.Module):
         self.action_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
         self.occlusion_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
 
-    def forward(self, samples: NestedTensor):
+    def forward(self, samples: NestedTensor, pos_depth=None):
         """ The forward expects a NestedTensor, which consists of:
                - samples.tensor: batched images, of shape
                     [batch_size x 3 x H x W]
@@ -93,6 +93,13 @@ class HoiTR(nn.Module):
 
         src, mask = features[-1].decompose()
         assert mask is not None
+
+        if pos_depth is not None:
+            # Make sure shape of encoded depth is the same as that of positional encoding
+            assert pos[-1].shape == pos_depth.shape
+            # Add pos_depth to positional encoding
+            pos[-1] = pos[-1] + pos_depth
+
         hs = \
         self.transformer(self.input_proj(src), mask, self.query_embed.weight,
                          pos[-1])[0]

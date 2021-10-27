@@ -4,8 +4,8 @@ index_of_that_image = 2
 
 # Train or validate on a subset of the complete dataset.
 USE_SMALL_ANNOTATION_FILE = False
-small_annotation_file = 'small_train_combined.odgt'
-#small_annotation_file = 'medium_train_combined.odgt'
+#small_annotation_file = 'small_train_combined.odgt'
+small_annotation_file = 'medium_train_combined.odgt'
 USE_SMALL_VALID_ANNOTATION_FILE = False
 small_valid_annotation_file = 'small_valid_combined.odgt'
 
@@ -37,14 +37,9 @@ object_th_debug = 0
 hoi_th_debug = 0
 occlusion_th_debug = 0
 
-
-num_workers_train = 16 # Not implemented yet
-batch_size_train = 5 # Not implemented yet
-
-
 # num_workers and batch size for the validation and test sets
 num_workers_validation = 2 # 16
-batch_size_validation = 30  # 30
+batch_size_validation = 10  # 30
 
 
 # Whether to use optimal transport. If not, use the Hungarian matcher.
@@ -58,4 +53,7 @@ SINKHORN_MAX_ITER = 10000 # default is 100
 
 BACK_PROP_SINKHORN_COST = False
 
+
+USE_DEPTH_DURING_TRAINING = True
+USE_DEPTH_DURING_INFERENCE = True
 

@@ -21,6 +21,11 @@ from evaluation import *
 import pandas as pd
 from util.misc import is_main_process
 import torch.distributed as dist
+from models.position_encoding import build_position_encoding
+from torch import nn
+from util.misc import (NestedTensor, nested_tensor_from_tensor_list,
+                       accuracy, get_world_size, interpolate,
+                       is_dist_avail_and_initialized)
 
 
 def progressBar(i, max, text):
@@ -188,8 +193,26 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
         samples = samples.to(device)
         targets = [{k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for t in targets]
 
+        # Prepare depth or delete depth
+        if USE_DEPTH_DURING_TRAINING:
+            depth.tensors = depth.tensors[:, 0:1]
+            depth = depth.to(device)
+            with torch.no_grad():
+                if isinstance(depth, (list, torch.Tensor)):
+                    depth = nested_tensor_from_tensor_list(depth)
+                m = nn.MaxPool2d(32, stride=32, ceil_mode=True)
+                depth.tensors = m(depth.tensors)
+                depth.mask = (m(depth.mask.type(torch.float))).type(torch.bool)
+                PE = build_position_encoding(args)
+                pos_depth = PE(depth)
+        else:
+            pos_depth = None
+            del depth.tensors
+            del depth.mask
+            del depth
+
         # Forward pass
-        outputs = model(samples)
+        outputs = model(samples, pos_depth=pos_depth)
 
         loss_dict = criterion(outputs, targets, optimal_transport=optimal_transport)
         weight_dict = criterion.weight_dict
@@ -298,12 +321,31 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
 
     for samples, depth, targets in data_loader:
 
-        original_targets = targets
         samples = samples.to(device)
         targets = [
             {k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for
             t in targets]
-        outputs = model(samples)
+
+        # Prepare depth or delete depth
+        if USE_DEPTH_DURING_INFERENCE:
+            depth.tensors = depth.tensors[:, 0:1]
+            depth = depth.to(device)
+            with torch.no_grad():
+                if isinstance(depth, (list, torch.Tensor)):
+                    depth = nested_tensor_from_tensor_list(depth)
+                PE = build_position_encoding(args)
+                m = nn.MaxPool2d(32, stride=32, ceil_mode=True)
+                depth.tensors = m(depth.tensors)
+                depth.mask = (m(depth.mask.type(torch.float))).type(torch.bool)
+                pos_depth = PE(depth)
+        else:
+            pos_depth = None
+            del depth.tensors
+            del depth.mask
+            del depth
+
+        # Forward pass
+        outputs = model(samples, pos_depth)
 
         # Compute Losses
         loss_dict = criterion(outputs, targets, training=False)
@@ -373,16 +415,31 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
     distance_list = list()
     occlusion_list = list()
 
-    for samples, targets in data_loader:
+    for samples, depth, targets in data_loader:
 
         original_targets = targets
         samples = samples.to(device)
-        targets = [
-            {k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for
-            t in targets]
+
+        # Prepare depth or delete depth
+        if USE_DEPTH_DURING_INFERENCE:
+            depth.tensors = depth.tensors[:, 0:1]
+            depth = depth.to(device)
+            with torch.no_grad():
+                if isinstance(depth, (list, torch.Tensor)):
+                    depth = nested_tensor_from_tensor_list(depth)
+                PE = build_position_encoding(args)
+                m = nn.MaxPool2d(32, stride=32, ceil_mode=True)
+                depth.tensors = m(depth.tensors)
+                depth.mask = (m(depth.mask.type(torch.float))).type(torch.bool)
+                pos_depth = PE(depth)
+        else:
+            pos_depth = None
+            del depth.tensors
+            del depth.mask
+            del depth
 
         # Forward pass
-        outputs = model(samples)
+        outputs = model(samples, pos_depth)
 
         # Construct Evaluation Outputs
         hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets, filter=True)
