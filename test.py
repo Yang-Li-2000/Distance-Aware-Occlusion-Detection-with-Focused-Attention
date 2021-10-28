@@ -160,6 +160,9 @@ def triplet_nms_for_vrd(hoi_list, nms_iou_human, nms_iou_object):
             y = hoi_list[idx_y]
             iou_human = IoU(x['h_box'], y['h_box'])
             iou_object = IoU(x['o_box'], y['o_box'])
+            # TODO: 1. do not filter by h_name and o_name.
+            #  2. In a single query, if bbox_A and bbox_B significantly overlap,
+            #  and their names are the same, do not output name
             if iou_human > nms_iou_human and iou_object > nms_iou_object \
                     and x['h_name'] == y['h_name'] and x['o_name'] == y['o_name'] \
                     and x['i_name'] == y['i_name'] and x['ocl_name'] == y['ocl_name']:

@@ -168,7 +168,8 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets, filte
                     continue
 
             hoi_list.append(pp)
-
+        # TODO: In a single query, if bbox_A and bbox_B significantly overlap,
+        # and their names are the same, do not output name
         hoi_list = triplet_nms_for_vrd(hoi_list, nms_iou_human, nms_iou_object)
         item = dict(image_id=image_id, hoi_list=hoi_list)
         final_hoi_result_list.append(item)
