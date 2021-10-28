@@ -92,6 +92,7 @@ def get_args_parser():
 
     # Loss coefficients.
     parser.add_argument('--dice_loss_coef', default=1, type=float)
+    parser.add_argument('--relation_loss_coef', default=1, type=float)
     parser.add_argument('--bbox_loss_coef', default=5, type=float)
     parser.add_argument('--giou_loss_coef', default=2, type=float)
     parser.add_argument('--eos_coef', default=0.02, type=float,
@@ -183,7 +184,18 @@ def main(args):
     # Build optimizer and learning rate scheduler
     optimizer = torch.optim.AdamW(param_dicts, lr=args.lr,
                                   weight_decay=args.weight_decay)
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
+
+
+    if CYCLIC_SCHEDULER:
+        lr_scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer,
+                                                         base_lr=CYCLIC_BASE_LR,
+                                                         max_lr=CYCLIC_MAX_LR,
+                                                         step_size_up = CYCLIC_STEP_SIZE_UP,
+                                                         step_size_down=CYCLIC_STEP_SIZE_DOWN,
+                                                         mode='triangular2',
+                                                         cycle_momentum=False)
+    else:
+        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
     # Build datasets
     dataset_train = build_dataset(image_set='train', args=args)
@@ -290,7 +302,8 @@ def main(args):
                                       data_loader_train,
                                       optimizer, device, epoch,
                                       args.clip_max_norm,
-                                      use_optimal_transport=USE_OPTIMAL_TRANSPORT)
+                                      use_optimal_transport=USE_OPTIMAL_TRANSPORT,
+                                      lr_scheduler = lr_scheduler)
         lr_scheduler.step()
 
         # Save preliminary checkpoint

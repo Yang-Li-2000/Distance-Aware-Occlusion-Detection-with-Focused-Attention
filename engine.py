@@ -49,7 +49,7 @@ def progressBar(i, max, text):
 def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Module, optimal_transport: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
                     device: torch.device, epoch: int, max_norm: float = 0,
-                    use_optimal_transport=False):
+                    use_optimal_transport=False, lr_scheduler=None):
     """
     Train the model for one epoch.
     """
@@ -244,6 +244,17 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
         ########################################################################
 
         iteratoin_count += 1
+
+        if LR_RANGE_TEST:
+            writer.add_scalar('Misc_train/lr', optimizer.param_groups[0]["lr"], iteratoin_count)
+            writer.add_scalar('Loss_train_unscaled/1_ce_objects', loss_dict_reduced_unscaled['human_loss_ce_unscaled'] + loss_dict_reduced_unscaled['object_loss_ce_unscaled'], iteratoin_count)
+            writer.add_scalar('Loss_train_unscaled/2_ce_distance', loss_dict_reduced_unscaled['action_loss_ce_unscaled'], iteratoin_count)
+            writer.add_scalar('Loss_train_unscaled/3_ce_occlusion', loss_dict_reduced_unscaled['occlusion_loss_ce_unscaled'], iteratoin_count)
+            writer.add_scalar('Loss_train_unscaled/4_reg_bbox', loss_dict_reduced_unscaled['loss_bbox_unscaled'], iteratoin_count)
+            writer.add_scalar('Loss_train_unscaled/5_reg_giou', loss_dict_reduced_unscaled['loss_giou_unscaled'], iteratoin_count)
+            # writer.add_scalar('Misc_train/error_distance', class_error_action, iteratoin_count)
+            # writer.add_scalar('Misc_train/error_occlusion', train_stats['class_error_occlusion'], iteratoin_count)
+            lr_scheduler.step()
 
     # gather stats from all processes
     metric_logger.synchronize_between_processes()

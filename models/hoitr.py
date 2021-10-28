@@ -509,7 +509,9 @@ def build(args):
 
     matcher = build_hoi_matcher(args)
 
-    weight_dict = dict(loss_ce=1, loss_bbox=args.bbox_loss_coef,
+    weight_dict = dict(loss_ce=1,
+                       loss_relation=args.relation_loss_coef,
+                       loss_bbox=args.bbox_loss_coef,
                        loss_giou=args.giou_loss_coef)
 
     # TODO this is a hack
