@@ -60,56 +60,12 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
 
 
     epoch_loss = 0
-    if use_optimal_transport and BACK_PROP_SINKHORN_COST:
-        print()
-        print("Epoch", epoch)
 
-        for samples, targets in data_loader:
-
-            # save a copy of targets which preserve
-            # image_id and num_bounding_boxes_in_ground_truth
-            original_targets = targets
-
-            # move tensors in the samples and targets to GPU and abandon objects
-            # that cannot be moved to GPU
-            samples = samples.to(device)
-            targets = [{k: v.to(device) for k, v in t.items() if k not in ['image_id', 'num_bounding_boxes_in_ground_truth']} for t in targets]
-
-            # Forward pass
-            outputs = model(samples)
-
-            # Loss Computation.
-            cost = optimal_transport(outputs, targets)
-            loss_value = cost
-
-            # Reduce losses over all GPUs
-            if util.misc.get_world_size() > 1:
-                dist.reduce(cost, dst=0)
-
-            # Backward pass
-            optimizer.zero_grad()
-            cost.backward()
-
-            # Gradient clip
-            if max_norm > 0:
-                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm)
-
-            # Step optimizer
-            optimizer.step()
-
-            # Record traning stats
-            epoch_loss += loss_value
-            writer.add_scalar('Loss/train', loss_value, iteratoin_count + epoch * len(data_loader))
-            iteratoin_count += 1
-            if utils.get_rank() == 0:
-                progressBar(iteratoin_count, max_num_iterations, "Training")
-
-        # compute epoch loss
-        stats = dict()
-        stats['loss'] = epoch_loss / iteratoin_count
-        print()
-
-        return stats
+    objects_loss_ce_unscaled = 0
+    action_loss_ce_unscaled = 0
+    occlusion_loss_ce_unscaled = 0
+    loss_bbox_unscaled = 0
+    loss_giou_unscaled = 0
 
     ############################################################################
     # (For debugging purpose)
@@ -226,6 +182,15 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
         # Losses that are not weighted by the weight dict
         loss_dict_reduced_unscaled = {f'{k}_unscaled': v
                                       for k, v in loss_dict_reduced.items()}
+
+        # Record unscaled losses
+        objects_loss_ce_unscaled += loss_dict_reduced_unscaled['human_loss_ce_unscaled'] + loss_dict_reduced_unscaled['object_loss_ce_unscaled']
+        action_loss_ce_unscaled += loss_dict_reduced_unscaled['action_loss_ce_unscaled']
+        occlusion_loss_ce_unscaled += loss_dict_reduced_unscaled['occlusion_loss_ce_unscaled']
+        loss_bbox_unscaled += loss_dict_reduced_unscaled['loss_bbox_unscaled']
+        loss_giou_unscaled += loss_dict_reduced_unscaled['loss_giou_unscaled']
+
+
         # Losses that are weighted by the weighted dict
         loss_dict_reduced_scaled = {k: v * weight_dict[k]
                                     for k, v in loss_dict_reduced.items() if k in weight_dict}
@@ -287,13 +252,15 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
     train_stats = {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
     # Write loss and lr to tensorboard at the end of each epoch
-    writer.add_scalar('Loss/train', train_stats['loss'], epoch)
-    writer.add_scalar('loss_ce/train', train_stats['loss_ce'], epoch)
-    writer.add_scalar('loss_bbox/train', train_stats['loss_bbox'], epoch)
-    writer.add_scalar('loss_giou/train', train_stats['loss_giou'], epoch)
-    writer.add_scalar('lr', train_stats['lr'], epoch)
-    writer.add_scalar('Class Error/train/distance', train_stats['class_error_action'], epoch)
-    writer.add_scalar('Class Error/train/occlusion', train_stats['class_error_occlusion'], epoch)
+    writer.add_scalar('Loss_train_unscaled/1_ce_objects', objects_loss_ce_unscaled / len(data_loader), epoch)
+    writer.add_scalar('Loss_train_unscaled/2_ce_distance', action_loss_ce_unscaled / len(data_loader), epoch)
+    writer.add_scalar('Loss_train_unscaled/3_ce_occlusion', action_loss_ce_unscaled / len(data_loader), epoch)
+    writer.add_scalar('Loss_train_unscaled/4_reg_bbox', loss_bbox_unscaled / len(data_loader), epoch)
+    writer.add_scalar('Loss_train_unscaled/5_reg_giou', loss_giou_unscaled / len(data_loader), epoch)
+    writer.add_scalar('Misc_train/lr', train_stats['lr'], epoch)
+    writer.add_scalar('Misc_train/error_distance', train_stats['class_error_action'], epoch)
+    writer.add_scalar('Misc_train/error_occlusion', train_stats['class_error_occlusion'], epoch)
+
 
     return train_stats
 
@@ -318,6 +285,14 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
     loss_ce = 0
     loss_bbox = 0
     loss_giou = 0
+
+    objects_loss_ce_unscaled = 0
+    action_loss_ce_unscaled = 0
+    occlusion_loss_ce_unscaled = 0
+    loss_bbox_unscaled = 0
+    loss_giou_unscaled = 0
+    error_distance_unscaled = 0
+    error_occlusion_unscaled = 0
 
     for samples, depth, targets in data_loader:
 
@@ -357,6 +332,16 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
         loss_dict_reduced = utils.reduce_dict(loss_dict)
         loss_dict_reduced_unscaled = {f'{k}_unscaled': v for k, v in loss_dict_reduced.items()}
         loss_dict_reduced_scaled = {k: v * weight_dict[k] for k, v in loss_dict_reduced.items() if k in weight_dict}
+
+        # Record unscaled losses
+        objects_loss_ce_unscaled += loss_dict_reduced_unscaled['human_loss_ce_unscaled'] + loss_dict_reduced_unscaled['object_loss_ce_unscaled']
+        action_loss_ce_unscaled += loss_dict_reduced_unscaled['action_loss_ce_unscaled']
+        occlusion_loss_ce_unscaled += loss_dict_reduced_unscaled['occlusion_loss_ce_unscaled']
+        loss_bbox_unscaled += loss_dict_reduced_unscaled['loss_bbox_unscaled']
+        loss_giou_unscaled += loss_dict_reduced_unscaled['loss_giou_unscaled']
+        error_distance_unscaled += loss_dict_reduced_unscaled['class_error_action_unscaled']
+        error_occlusion_unscaled += loss_dict_reduced_unscaled['class_error_occlusion_unscaled']
+
         losses_reduced_scaled = sum(loss_dict_reduced_scaled.values())
         loss_value = losses_reduced_scaled.item()
         loss += loss_value
@@ -371,15 +356,13 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
         iteratoin_count += 1
 
     # Record Losses to tensorboard
-    loss = loss / iteratoin_count
-    loss_ce = loss_ce / iteratoin_count
-    loss_bbox = loss_bbox / iteratoin_count
-    loss_giou = loss_giou / iteratoin_count
-    writer.add_scalar('Loss/' + valid_or_test, loss, epoch)
-    writer.add_scalar('loss_ce/' + valid_or_test, loss_ce, epoch)
-    writer.add_scalar('loss_bbox/' + valid_or_test, loss_bbox, epoch)
-    writer.add_scalar('loss_giou/' + valid_or_test, loss_giou, epoch)
-
+    writer.add_scalar('Loss_valid_unscaled/1_ce_objects', objects_loss_ce_unscaled / len(data_loader), epoch)
+    writer.add_scalar('Loss_valid_unscaled/2_ce_distance', action_loss_ce_unscaled / len(data_loader), epoch)
+    writer.add_scalar('Loss_valid_unscaled/3_ce_occlusion', action_loss_ce_unscaled / len(data_loader), epoch)
+    writer.add_scalar('Loss_valid_unscaled/4_reg_bbox', loss_bbox_unscaled / len(data_loader), epoch)
+    writer.add_scalar('Loss_valid_unscaled/5_reg_giou', loss_giou_unscaled / len(data_loader), epoch)
+    writer.add_scalar('Misc_valid/error_distance', error_distance_unscaled/ iteratoin_count, epoch)
+    writer.add_scalar('Misc_valid/error_occlusion', error_occlusion_unscaled / iteratoin_count, epoch)
     return
 
 
