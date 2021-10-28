@@ -132,22 +132,22 @@ def main(args):
                                    num_workers=args.num_workers)
 
 
-    # Load from pretrained DETR model.
-    assert args.num_queries == 100, args.num_queries
-    assert args.enc_layers == 6 and args.dec_layers == 6
-    assert args.backbone in ['resnet50', 'resnet101', 'swin'], args.backbone
-    if args.backbone == 'resnet50':
-        pretrain_model = './data/detr_coco/detr-r50-e632da11.pth'
-    elif args.backbone == 'resnet101':
-        pretrain_model = './data/detr_coco/detr-r101-2c7b67e5.pth'
-    else:
-        pretrain_model = None
-    if pretrain_model is not None:
-        pretrain_dict = torch.load(pretrain_model, map_location='cpu')['model']
-        my_model_dict = model_without_ddp.state_dict()
-        pretrain_dict = {k: v for k, v in pretrain_dict.items() if k in my_model_dict}
-        my_model_dict.update(pretrain_dict)
-        model_without_ddp.load_state_dict(my_model_dict)
+    # # Load from pretrained DETR model.
+    # assert args.num_queries == 100, args.num_queries
+    # assert args.enc_layers == 6 and args.dec_layers == 6
+    # assert args.backbone in ['resnet50', 'resnet101', 'swin'], args.backbone
+    # if args.backbone == 'resnet50':
+    #     pretrain_model = './data/detr_coco/detr-r50-e632da11.pth'
+    # elif args.backbone == 'resnet101':
+    #     pretrain_model = './data/detr_coco/detr-r101-2c7b67e5.pth'
+    # else:
+    #     pretrain_model = None
+    # if pretrain_model is not None:
+    #     pretrain_dict = torch.load(pretrain_model, map_location='cpu')['model']
+    #     my_model_dict = model_without_ddp.state_dict()
+    #     pretrain_dict = {k: v for k, v in pretrain_dict.items() if k in my_model_dict}
+    #     my_model_dict.update(pretrain_dict)
+    #     model_without_ddp.load_state_dict(my_model_dict)
 
     # Load model from checkpoint
     checkpoint = torch.load(args.resume, map_location='cpu')

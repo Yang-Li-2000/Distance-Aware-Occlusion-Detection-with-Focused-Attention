@@ -547,7 +547,7 @@ class OptimalTransport(nn.Module):
     def __init__(self, args, alpha=1, num_queries=100, k=1, eps=0.1, max_iter=50):
         super().__init__()
         self.alpha = alpha
-        self.num_queries = num_queries
+        self.num_queries = args.num_queries
         # the number of positive anchors for each gt
         self.k = OT_k
         self.sinkhorn = SinkhornDistance(eps=eps, max_iter=max_iter)
@@ -752,9 +752,9 @@ class OptimalTransport(nn.Module):
         if training:
             # the first target
             human_target_boxes_1 = human_target_boxes[:, 0:4].unsqueeze(
-                1).expand(-1, 100, -1)
+                1).expand(-1, self.num_queries, -1)
             object_target_boxes_1 = object_target_boxes[:, 0:4].unsqueeze(
-                1).expand(-1, 100, -1)
+                1).expand(-1, self.num_queries, -1)
             loss_human_boxes_1 = F.l1_loss(human_src_boxes, human_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
             loss_object_boxes_1 = F.l1_loss(object_src_boxes, object_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
             human_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(
@@ -772,9 +772,9 @@ class OptimalTransport(nn.Module):
 
             # the second target
             human_target_boxes_2 = human_target_boxes[:, 4:].unsqueeze(
-                1).expand(-1, 100, -1)
+                1).expand(-1, self.num_queries, -1)
             object_target_boxes_2 = object_target_boxes[:, 4:].unsqueeze(
-                1).expand(-1, 100, -1)
+                1).expand(-1, self.num_queries, -1)
             loss_human_boxes_2 = F.l1_loss(human_src_boxes, human_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
             loss_object_boxes_2 = F.l1_loss(object_src_boxes, object_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
             human_loss_giou_2 = (1 - torch.diag(box_ops.generalized_box_iou(

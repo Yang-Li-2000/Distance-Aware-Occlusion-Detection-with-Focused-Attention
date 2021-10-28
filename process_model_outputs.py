@@ -49,7 +49,7 @@ def generate_hoi_list_using_model_outputs(args, outputs, original_targets, filte
     elif args.dataset_file == 'two_point_five_vrd':
         num_classes = 602
         num_actions = 4
-        top_k = 100
+        top_k = args.num_queries
         # TODO: increase --num_queries
     else:
         raise NotImplementedError()
