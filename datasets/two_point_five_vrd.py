@@ -13,6 +13,11 @@ from PIL import Image
 from magic_numbers import *
 
 import pandas as pd
+import gc
+
+# This partially addresses the EOF Error
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 # Load class_descriptions_boxable
 class_descriptions_boxable = pd.read_csv('data/2.5vrd/class-descriptions-boxable.csv', header=None)
@@ -517,7 +522,27 @@ class two_point_five_VRD(VisionDataset):
 
         assert img.shape == depth.shape
 
-        return img, depth, target
+        # Put items in target into arrays to partially address the
+        # EOF Error when num_workers > 1
+        human_boxes = target['human_boxes']
+        human_labels = target['human_labels']
+        object_boxes = target['object_boxes']
+        object_labels = target['object_labels']
+        action_boxes = target['action_boxes']
+        action_labels = target['action_labels']
+        occlusion_labels = target['occlusion_labels']
+        image_id = target['image_id']
+        org_size = target['org_size']
+        num_bounding_boxes_in_ground_truth = target['num_bounding_boxes_in_ground_truth']
+
+        image_id = np.array(image_id)
+        num_bounding_boxes_in_ground_truth = torch.tensor(num_bounding_boxes_in_ground_truth)
+
+        target.clear()
+        del target
+        gc.collect()
+
+        return img, depth, human_boxes, human_labels, object_boxes, object_labels, action_boxes, action_labels, occlusion_labels, image_id, org_size, num_bounding_boxes_in_ground_truth
 
     def __len__(self):
         return len(self.annotations)

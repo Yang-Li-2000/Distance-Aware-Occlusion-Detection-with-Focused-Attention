@@ -8,6 +8,7 @@
 """
 Train functions used in main.py
 """
+import gc
 import math
 import sys
 from typing import Iterable
@@ -166,6 +167,7 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
             del depth.tensors
             del depth.mask
             del depth
+            gc.collect()
 
         # Forward pass
         outputs = model(samples, pos_depth=pos_depth)
@@ -273,6 +275,7 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
     writer.add_scalar('Misc_train/error_occlusion', train_stats['class_error_occlusion'], epoch)
 
 
+    torch.cuda.empty_cache()
     return train_stats
 
 
@@ -329,6 +332,7 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
             del depth.tensors
             del depth.mask
             del depth
+            gc.collect()
 
         # Forward pass
         outputs = model(samples, pos_depth)
@@ -374,6 +378,8 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
     writer.add_scalar('Loss_valid_unscaled/5_reg_giou', loss_giou_unscaled / len(data_loader), epoch)
     writer.add_scalar('Misc_valid/error_distance', error_distance_unscaled/ iteratoin_count, epoch)
     writer.add_scalar('Misc_valid/error_occlusion', error_occlusion_unscaled / iteratoin_count, epoch)
+
+    torch.cuda.empty_cache()
     return
 
 
@@ -431,6 +437,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
             del depth.tensors
             del depth.mask
             del depth
+            gc.collect()
 
         # Forward pass
         outputs = model(samples, pos_depth)
@@ -491,7 +498,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
                'distance': 'int'})
 
     # Write DataFrame to file
-    file_name = 'predictions'
+    file_name = args.output_name
     file_name = file_name + '_' + valid_or_test + '_' + str(epoch-1) + '.csv'
     print(file_name)
     df.to_csv(file_name, index=False)

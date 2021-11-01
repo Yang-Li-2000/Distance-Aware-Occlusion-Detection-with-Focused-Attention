@@ -59,6 +59,7 @@ def get_args_parser():
     parser.add_argument('--no_aux_loss', dest='aux_loss', action='store_false',
                         help="Disables auxiliary decoding losses (loss at each layer)")
     # Matcher.
+    parser.add_argument('--relation_loss_coef', default=1, type=float)
     parser.add_argument('--set_cost_class', default=1, type=float,
                         help="Class coefficient in the matching cost")
     parser.add_argument('--set_cost_bbox', default=5, type=float,
@@ -90,10 +91,16 @@ def get_args_parser():
                         help='start epoch')
     parser.add_argument('--num_workers', default=0, type=int)
 
+    parser.add_argument('--output_name', default='predictions', type=str)
+
     return parser
 
 
 def main(args):
+
+    print()
+    print("USE_DEPTH_DURING_INFERENCE: ", USE_DEPTH_DURING_INFERENCE)
+    print()
 
     device = torch.device(args.device)
 
@@ -181,6 +188,6 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('HOI Transformer test script', parents=[get_args_parser()])
     args = parser.parse_args()
-    if args.output_dir:
-        Path(args.output_dir).mkdir(parents=True, exist_ok=True)
+    # if args.output_dir:
+    #     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     main(args)

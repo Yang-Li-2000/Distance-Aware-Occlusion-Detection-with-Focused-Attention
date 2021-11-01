@@ -105,7 +105,7 @@ def get_args_parser():
 
     # Modify to your log path ******************************* !!!
     exp_time = datetime.datetime.now().strftime('%Y%m%d%H%M')
-    create_log_dir(checkpoint='checkpoint', log_path='/home')
+    create_log_dir(checkpoint='checkpoint', log_path='~/log_path')
     work_dir = 'checkpoint/p_{}'.format(exp_time)
 
     parser.add_argument('--output_dir', default=work_dir,
@@ -141,6 +141,11 @@ def main(args):
     utils.init_distributed_mode(args)
     print(args)
     device = torch.device(args.device)
+
+    print()
+    print("USE_OPTIMAL_TRANSPORT:", USE_OPTIMAL_TRANSPORT)
+    print()
+    print("USE_DEPTH_DURING_TRAINING:", USE_DEPTH_DURING_TRAINING)
 
     # Create summary writer for tensorboard
     # It will recorde stats such as losses and lr to tensorboard
@@ -214,10 +219,19 @@ def main(args):
     batch_sampler_train = torch.utils.data.BatchSampler(sampler_train,
                                                         args.batch_size,
                                                         drop_last=True)
+
+    # This partially addresses the EOF Error
+    sharing_strategy = "file_system"
+    torch.multiprocessing.set_sharing_strategy(sharing_strategy)
+
+    def set_worker_sharing_strategy(worker_id: int) -> None:
+        torch.multiprocessing.set_sharing_strategy(sharing_strategy)
+
     data_loader_train = DataLoader(dataset_train,
                                    batch_sampler=batch_sampler_train,
                                    collate_fn=utils.collate_fn,
-                                   num_workers=args.num_workers)
+                                   num_workers=args.num_workers,
+                                   worker_init_fn=set_worker_sharing_strategy)
 
     # (For debugging purpose) create a sequential sampler
     sequential_data_loader_train = DataLoader(dataset_train,
@@ -231,26 +245,30 @@ def main(args):
     data_loader_valid = DataLoader(dataset_valid,
                                    batch_sampler=batch_sampler_valid,
                                    collate_fn=utils.collate_fn,
-                                   num_workers=num_workers_validation)
+                                   num_workers=num_workers_validation,
+                                   worker_init_fn=set_worker_sharing_strategy)
     batch_sampler_test = torch.utils.data.BatchSampler(sampler_test,
                                                        batch_size_validation,
                                                        drop_last=False)
     data_loader_test = DataLoader(dataset_test,
                                    batch_sampler=batch_sampler_test,
                                    collate_fn=utils.collate_fn,
-                                   num_workers=num_workers_validation)
+                                   num_workers=num_workers_validation,
+                                   worker_init_fn=set_worker_sharing_strategy)
 
     # Load from pretrained DETR model.
-    #assert args.num_queries == 100, args.num_queries
-    #assert args.enc_layers == 6 and args.dec_layers == 6
-    #assert args.backbone in ['resnet50', 'resnet101', 'swin'], args.backbone
-    # if args.backbone == 'resnet50':
-    #     pretrain_model = './data/detr_coco/detr-r50-e632da11.pth'
-    # elif args.backbone == 'resnet101':
-    #     pretrain_model = './data/detr_coco/detr-r101-2c7b67e5.pth'
-    # else:
-    #     pretrain_model = None
-    pretrain_model = None
+    if args.num_queries == 100 and args.enc_layers == 6:
+        assert args.num_queries == 100, args.num_queries
+        assert args.enc_layers == 6 and args.dec_layers == 6
+        assert args.backbone in ['resnet50', 'resnet101', 'swin'], args.backbone
+        if args.backbone == 'resnet50':
+            pretrain_model = './data/detr_coco/detr-r50-e632da11.pth'
+        elif args.backbone == 'resnet101':
+            pretrain_model = './data/detr_coco/detr-r101-2c7b67e5.pth'
+        else:
+            pretrain_model = None
+    else:
+        pretrain_model = None
     if pretrain_model is not None:
         pretrain_dict = torch.load(pretrain_model, map_location='cpu')['model']
         my_model_dict = model_without_ddp.state_dict()

@@ -18,9 +18,9 @@ from torch import Tensor
 
 # needed due to empty tensor bug in pytorch and torchvision 0.5
 import torchvision
-if float(torchvision.__version__[:3]) < 0.7:
-    from torchvision.ops import _new_empty_tensor
-    from torchvision.ops.misc import _output_size
+# if float(torchvision.__version__[:3]) < 0.7:
+#     from torchvision.ops import _new_empty_tensor
+#     from torchvision.ops.misc import _output_size
 
 
 class SmoothedValue(object):
@@ -266,11 +266,21 @@ def get_sha():
 
 
 def collate_fn(batch):
+
+    names = ['human_boxes', 'human_labels', 'object_boxes', 'object_labels', 'action_boxes', 'action_labels', 'occlusion_labels', 'image_id', 'org_size', 'num_bounding_boxes_in_ground_truth']
+
+    for i in range(len(batch)):
+        target = dict(zip(names, batch[i][2:]))
+        target['image_id'] = target['image_id'].item()
+        target['num_bounding_boxes_in_ground_truth'] = target['num_bounding_boxes_in_ground_truth'].item()
+
+        batch[i] = (batch[i][0], batch[i][1], target)
+
     batch = list(zip(*batch))
     # Transform samples and targets from tuples to nested tensors
     batch[0] = nested_tensor_from_tensor_list(batch[0])
     batch[1] = nested_tensor_from_tensor_list(batch[1])
-    return tuple(batch)
+    return batch
 
 
 def _max_by_axis(the_list):
