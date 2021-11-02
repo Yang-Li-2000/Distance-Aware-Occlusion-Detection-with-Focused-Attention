@@ -1120,28 +1120,85 @@ class OptimalTransport(nn.Module):
                 if TEST_COST_MATRIX:
                     differences = self.test_cost_matrix(outputs,targets,cost_matrix)
 
-                n = self.num_queries
-                m = cost_matrix.shape[1] - 1
-                k = self.k
+                if HUNGARIAN_K_ASSIGNMENTS:
+                    n = self.num_queries
+                    m = cost_matrix.shape[1] - 1
+                    k = self.k
 
-                # supplying vector s
-                s = torch.ones(m + 1, dtype=int, device=cost_matrix.device) * -1
-                s[0:m + 1] = k
-                s[-1] = n - m * k
+                    expanded_cost_matrix = torch.zeros((cost_matrix.shape[0], 2 * k, n), dtype=float)
+                    assignment_indices = 2 * k * torch.ones((cost_matrix.shape[0], n), dtype=int,
+                                                       device=cost_matrix.device)
 
-                # demanding vector d
-                d = torch.ones(n, dtype=int, device=cost_matrix.device)
+                    for i in range(cost_matrix.shape[0]):
+                        expanded_cost_matrix[i][:k] = cost_matrix[i][0].unsqueeze(0).repeat(k, 1)
+                        expanded_cost_matrix[i][k:2 * k] = cost_matrix[i][1].unsqueeze(0).repeat(k, 1)
+                        row_ind, col_ind = linear_sum_assignment(expanded_cost_matrix[i])
+                        for j in range(len(row_ind)):
+                            assignment_indices[i][col_ind[j]] = row_ind[j]
 
-                # optimal assigning plan π
-                _, pi = self.sinkhorn(s, d, cost_matrix)
+                    #max_assigned_units, matched_gt_inds = torch.max(assignment_matrix, dim=1)
+                    matched_gt_inds = assignment_indices // k
+                    fg_mask = matched_gt_inds < 2
 
-                # Rescale pi so that the max pi for each gt equals to 1.
-                rescale_factor, _ = pi.max(dim=2)
-                pi = pi / rescale_factor.unsqueeze(2)
+                else:
 
-                # Process targets using pi
-                max_assigned_units, matched_gt_inds = torch.max(pi, dim=1)
-                fg_mask = matched_gt_inds != m
+                    if NORMALIZED_MAX:
+
+                        n = self.num_queries
+                        m = cost_matrix.shape[1] - 1
+                        k = self.k
+
+                        # supplying vector s
+                        s = torch.ones(m + 1, dtype=int, device=cost_matrix.device) * -1
+                        s[0:m + 1] = k
+                        s[-1] = n - m * k
+
+                        # demanding vector d
+                        d = torch.ones(n, dtype=int, device=cost_matrix.device)
+
+                        # optimal assigning plan π
+                        _, pi = self.sinkhorn(s, d, cost_matrix)
+
+                        # Rescale pi so that the max pi for each gt equals to 1.
+                        rescale_factor, _ = pi.max(dim=2)
+                        pi = pi / rescale_factor.unsqueeze(2)
+
+                        # Process targets using pi
+                        max_assigned_units, matched_gt_inds = torch.max(pi, dim=1)
+                        fg_mask = matched_gt_inds != m
+
+                    else:
+
+                        n = self.num_queries
+                        m = cost_matrix.shape[1] - 1
+                        k = self.k
+
+                        expanded_cost_matrix = torch.zeros((cost_matrix.shape[0], n, n), dtype=float, device=cost_matrix.device)
+
+                        for i in range(cost_matrix.shape[0]):
+                            expanded_cost_matrix[i][:k] = cost_matrix[i][0].unsqueeze(0).repeat(k,1)
+                            expanded_cost_matrix[i][k:2*k] = cost_matrix[i][1].unsqueeze(0).repeat(k,1)
+                            expanded_cost_matrix[i][2*k:] = cost_matrix[i][2].unsqueeze(0).repeat(n - 2*k, 1)
+
+                        # supplying vector s
+                        s = torch.ones(n, dtype=int, device=cost_matrix.device)
+                        #s[0:m + 1] = k
+                        #s[-1] = n - m * k
+
+                        # demanding vector d
+                        d = torch.ones(n, dtype=int, device=cost_matrix.device)
+
+                        # optimal assigning plan π
+                        _, pi = self.sinkhorn(s, d, expanded_cost_matrix)
+
+                        # Rescale pi so that the max pi for each gt equals to 1.
+                        #rescale_factor, _ = pi.max(dim=2)
+                        #pi = pi / rescale_factor.unsqueeze(2)
+
+                        # Process targets using pi
+                        max_assigned_units, matched_gt_inds = torch.max(pi, dim=1)
+                        matched_gt_inds = matched_gt_inds // k
+                        fg_mask = matched_gt_inds < m
 
 
                 if indices_only:
