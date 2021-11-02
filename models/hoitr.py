@@ -10,6 +10,7 @@ DETR model and criterion classes.
 """
 import numpy as np
 import torch
+from scipy.optimize import linear_sum_assignment
 import torch.nn.functional as F
 from torch import nn
 
@@ -64,12 +65,11 @@ class HoiTR(nn.Module):
         self.occlusion_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
 
     def forward(self, samples: NestedTensor, pos_depth=None):
-        """ The forward expects a NestedTensor, which consists of:
+        """ The forward expects a NestedTensor, which consists of:
                - samples.tensor: batched images, of shape
                     [batch_size x 3 x H x W]
                - samples.mask: a binary mask of shape [batch_size x H x W],
                     containing 1 on padded pixels
-
             It returns a dict with the following elements:
                - "pred_logits": the classification logits (including no-object)
                                 for all queries. Shape =
@@ -509,9 +509,7 @@ def build(args):
 
     matcher = build_hoi_matcher(args)
 
-    weight_dict = dict(loss_ce=1,
-                       loss_relation=args.relation_loss_coef,
-                       loss_bbox=args.bbox_loss_coef,
+    weight_dict = dict(loss_ce=1, loss_bbox=args.bbox_loss_coef,
                        loss_giou=args.giou_loss_coef)
 
     # TODO this is a hack
@@ -546,14 +544,14 @@ class OptimalTransport(nn.Module):
         After that, it compute the losses using the assigned targets.
     """
 
-    def __init__(self, args, alpha=1, num_queries=100, k=1, eps=0.1, max_iter=50):
+    def __init__(self, args, alpha=1, num_queries=400, eps=0.01, max_iter=1000):
         super().__init__()
         self.alpha = alpha
         self.num_queries = args.num_queries
         # the number of positive anchors for each gt
         self.k = OT_k
-        self.sinkhorn = SinkhornDistance(eps=eps, max_iter=max_iter)
-
+        self.eps = eps
+        self.sinkhorn = SinkhornDistance(eps=self.eps, max_iter=max_iter)
         self.cost_class = args.set_cost_class
         self.cost_bbox = args.set_cost_bbox
         self.cost_giou = args.set_cost_giou
@@ -593,7 +591,66 @@ class OptimalTransport(nn.Module):
         device = torch.device(args.device)
         self.to(device)
 
-    #@torch.no_grad()
+    def dynamic_k_estimate(self, outputs, targets, training=True):
+        """
+        Estimate the value of k from the first 10 closest queries.
+        :param outputs: outputs of the model after the forward pass.
+        :param targets:
+        :param training:
+        """
+        num_queries = self.num_queries
+
+        def store_to_list(name):
+            result = list()
+            for i in range(len(targets)):
+                result.append(targets[i][name].reshape(-1))
+            return torch.vstack(result)
+
+        human_src_boxes = outputs['human_pred_boxes']
+        human_target_boxes = store_to_list('human_boxes')
+
+        object_src_boxes = outputs['object_pred_boxes']
+        object_target_boxes = store_to_list('object_boxes')
+
+        if training:
+            # the first target
+            human_target_boxes_1 = human_target_boxes[:, 0:4].unsqueeze(
+                1).expand(-1, self.num_queries, -1)
+            object_target_boxes_1 = object_target_boxes[:, 0:4].unsqueeze(
+                1).expand(-1, self.num_queries, -1)
+            loss_human_boxes_1,_ = box_ops.box_iou(box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1,4)),
+                                                   box_ops.box_cxcywh_to_xyxy(human_target_boxes_1.reshape(-1,4)))
+            loss_object_boxes_1,_ = box_ops.box_iou(box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1,4)),
+                                                 box_ops.box_cxcywh_to_xyxy(object_target_boxes_1.reshape(-1,4)))
+
+            loss_boxes_1 = 0.5 * torch.diag(loss_human_boxes_1).reshape(-1, self.num_queries) + 0.5 * torch.diag(loss_object_boxes_1).reshape(-1, self.num_queries)
+
+            values_1, _= torch.topk(loss_boxes_1, 10, dim=1)
+
+            k_1 = values_1.sum(dim=1)
+
+            # the second target
+            human_target_boxes_2 = human_target_boxes[:, 4:].unsqueeze(
+                1).expand(-1, self.num_queries, -1)
+            object_target_boxes_2 = object_target_boxes[:, 4:].unsqueeze(
+                1).expand(-1, self.num_queries, -1)
+            loss_human_boxes_2, _ = box_ops.box_iou(box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)),
+                                                    box_ops.box_cxcywh_to_xyxy(
+                                                        human_target_boxes_2.reshape(-1, 4)))
+            loss_object_boxes_2, _ = box_ops.box_iou(box_ops.box_cxcywh_to_xyxy(object_src_boxes.reshape(-1, 4)),
+                                                     box_ops.box_cxcywh_to_xyxy(
+                                                         object_target_boxes_2.reshape(-1, 4)))
+
+            loss_boxes_2 = 0.5 * torch.diag(loss_human_boxes_1).reshape(-1, self.num_queries) + 0.5 * torch.diag(loss_object_boxes_1).reshape(-1,
+                                                                                                                     self.num_queries)
+
+            values_2, _ = torch.topk(loss_boxes_2, 10, dim=1)
+
+            k_2 = values_2.sum(dim=1)
+
+            return k_1, k_2
+
+    @torch.no_grad()
     def loss_cls(self, outputs, targets, training=True, log=True):
         """
         Compute the classification cost matrix. TODO
@@ -683,23 +740,23 @@ class OptimalTransport(nn.Module):
                 occlusion_target_classes_2) * (occlusion_src_logits.shape[
                                                    -1] - 1)
 
-            loss_human_classes_bg = F.cross_entropy(
+            loss_human_classes_bg = BG_COEF * F.cross_entropy(
                 human_src_logits.permute(0, 2, 1), bg_human_classes,
                 reduction='none').unsqueeze(1)
-            loss_object_classes_bg = F.cross_entropy(
+            loss_object_classes_bg = BG_COEF * F.cross_entropy(
                 object_src_logits.permute(0, 2, 1), bg_object_classes,
                 reduction='none').unsqueeze(1)
-            loss_action_classes_bg = F.cross_entropy(
+            loss_action_classes_bg = BG_COEF * F.cross_entropy(
                 action_src_logits.permute(0, 2, 1), bg_action_classes,
                 reduction='none').unsqueeze(1)
-            loss_occlusion_classes_bg = F.cross_entropy(
+            loss_occlusion_classes_bg = BG_COEF * F.cross_entropy(
                 occlusion_src_logits.permute(0, 2, 1), bg_occlusion_classes,
                 reduction='none').unsqueeze(1)
 
             # combine them
             human_loss_cls = torch.cat(
                 [loss_human_classes_1, loss_human_classes_2,
-                 loss_human_classes_bg], dim=1)
+                    loss_human_classes_bg], dim=1)
             object_loss_cls = torch.cat(
                 [loss_object_classes_1, loss_object_classes_2,
                  loss_object_classes_bg], dim=1)
@@ -727,7 +784,7 @@ class OptimalTransport(nn.Module):
 
         return loss_cls, human_target_classes, object_target_classes, action_target_classes, occlusion_target_classes
 
-    #@torch.no_grad()
+    @torch.no_grad()
     def loss_reg(self, outputs, targets, training=True, log=True):
         """
         TODO
@@ -754,9 +811,9 @@ class OptimalTransport(nn.Module):
         if training:
             # the first target
             human_target_boxes_1 = human_target_boxes[:, 0:4].unsqueeze(
-                1).expand(-1, self.num_queries, -1)
+                1).expand(-1, num_queries, -1)
             object_target_boxes_1 = object_target_boxes[:, 0:4].unsqueeze(
-                1).expand(-1, self.num_queries, -1)
+                1).expand(-1, num_queries, -1)
             loss_human_boxes_1 = F.l1_loss(human_src_boxes, human_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
             loss_object_boxes_1 = F.l1_loss(object_src_boxes, object_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
             human_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(
@@ -975,9 +1032,6 @@ class OptimalTransport(nn.Module):
         return differences
 
 
-
-
-
     def forward(self, outputs, targets, training=True, indices_only=False):
         """
         TODO
@@ -1001,26 +1055,52 @@ class OptimalTransport(nn.Module):
 
             if TEST_COST_MATRIX:
                 differences = self.test_cost_matrix(outputs, targets, cost_matrix)
+            with torch.no_grad():
+                n = self.num_queries
+                m = cost_matrix.shape[1] - 1
 
-            n = self.num_queries
-            m = cost_matrix.shape[1] - 1
-            k = self.k
+                if USE_DYNAMIC_K_ESTIMATE:
+                    k_1, k_2 = self.dynamic_k_estimate(outputs,targets)
+                else:
+                    k_1 = k_2 = self.k * torch.ones(cost_matrix.shape[0])
 
-            # supplying vector s
-            s = torch.ones(m + 1, dtype=int, device=cost_matrix.device) * -1
-            s[0:m + 1] = k
-            s[-1] = n - m * k
+                # supplying vector s
+                s = torch.ones((cost_matrix.shape[0], m + 1), dtype=int, device=cost_matrix.device) * -1
+                s[:, 0] = k_1
+                s[:, 1] = k_2
+                s[:, -1] = n - k_1 - k_2
 
-            # demanding vector d
-            d = torch.ones(n, dtype=int, device=cost_matrix.device)
+                # demanding vector d
+                d = torch.ones((cost_matrix.shape[0],  n), dtype=int, device=cost_matrix.device)
 
-            # optimal assigning plan π
-            cost, pi = self.sinkhorn(s, d, cost_matrix)
+                # optimal assigning plan π
+                _, pi = self.sinkhorn(s, d, cost_matrix)
 
-            return cost.sum()
+                max_assigned_units, matched_gt_inds = torch.max(pi, dim=1)
+
+                assign_plan = torch.zeros_like(pi, dtype=int, device=cost_matrix.device, requires_grad=False)
+
+                def accelerated_lr(units):
+                    if 0 <= units <= 1.0/3.0:
+                        return 0
+                    elif 1.0/3.0 < units <= 0.5:
+                        return 0.5
+                    elif 0.5 < units < 1:
+                        return 1 + 0.5 * torch.exp(2 - 1/(1 - units))
+                    elif units >= 1:
+                        return 1
+
+                for i in range(pi.shape[0]):
+                    for j, idx in enumerate(matched_gt_inds[i]):
+                        if idx != m:
+                            assign_plan[i][idx][j] = accelerated_lr(max_assigned_units[i][j])
+
+            opt_cost = assign_plan * cost_matrix
+
+            return opt_cost.sum()
 
         with torch.no_grad():
-            if training or indices_only:
+            if training:
                 loss_cls, human_target_classes, object_target_classes, \
                 action_target_classes, occlusion_target_classes \
                     = self.loss_cls(outputs, targets)
@@ -1033,29 +1113,58 @@ class OptimalTransport(nn.Module):
                 if TEST_COST_MATRIX:
                     differences = self.test_cost_matrix(outputs,targets,cost_matrix)
 
-                n = self.num_queries
-                m = cost_matrix.shape[1] - 1
-                k = self.k
+                if HUNGARIAN_K_ASSIGNMENTS:
+                    n = self.num_queries
+                    m = cost_matrix.shape[1] - 1
+                    k = self.k
 
-                # supplying vector s
-                s = torch.ones(m + 1, dtype=int, device=cost_matrix.device) * -1
-                s[0:m + 1] = k
-                s[-1] = n - m * k
+                    expanded_cost_matrix = torch.zeros((cost_matrix.shape[0], 2 * k, n), dtype=float)
+                    assignment_indices = 2 * k * torch.ones((cost_matrix.shape[0], n), dtype=int,
+                                                       device=cost_matrix.device)
 
-                # demanding vector d
-                d = torch.ones(n, dtype=int, device=cost_matrix.device)
+                    for i in range(cost_matrix.shape[0]):
+                        expanded_cost_matrix[i][:k] = cost_matrix[i][0].unsqueeze(0).repeat(k, 1)
+                        expanded_cost_matrix[i][k:2 * k] = cost_matrix[i][1].unsqueeze(0).repeat(k, 1)
+                        row_ind, col_ind = linear_sum_assignment(expanded_cost_matrix[i])
+                        for j in range(len(row_ind)):
+                            assignment_indices[i][col_ind[j]] = row_ind[j]
 
-                # optimal assigning plan π
-                _, pi = self.sinkhorn(s, d, cost_matrix)
+                    #max_assigned_units, matched_gt_inds = torch.max(assignment_matrix, dim=1)
+                    matched_gt_inds = assignment_indices // k
+                    fg_mask = matched_gt_inds < 2
 
-                # Rescale pi so that the max pi for each gt equals to 1.
-                rescale_factor, _ = pi.max(dim=2)
-                pi = pi / rescale_factor.unsqueeze(2)
+                else:
 
-                # Process targets using pi
-                max_assigned_units, matched_gt_inds = torch.max(pi, dim=1)
-                fg_mask = matched_gt_inds != m
+                    n = self.num_queries
+                    m = cost_matrix.shape[1] - 1
+                    k = self.k
 
+                    expanded_cost_matrix = torch.zeros((cost_matrix.shape[0], n, n), dtype=float, device=cost_matrix.device)
+
+                    for i in range(cost_matrix.shape[0]):
+                        expanded_cost_matrix[i][:k] = cost_matrix[i][0].unsqueeze(0).repeat(k,1)
+                        expanded_cost_matrix[i][k:2*k] = cost_matrix[i][1].unsqueeze(0).repeat(k,1)
+                        expanded_cost_matrix[i][2*k:] = cost_matrix[i][2].unsqueeze(0).repeat(n - 2*k, 1)
+
+                    # supplying vector s
+                    s = torch.ones(n, dtype=int, device=cost_matrix.device)
+                    #s[0:m + 1] = k
+                    #s[-1] = n - m * k
+
+                    # demanding vector d
+                    d = torch.ones(n, dtype=int, device=cost_matrix.device)
+
+                    # optimal assigning plan π
+                    _, pi = self.sinkhorn(s, d, expanded_cost_matrix)
+
+                    # Rescale pi so that the max pi for each gt equals to 1.
+                    #rescale_factor, _ = pi.max(dim=2)
+                    #pi = pi / rescale_factor.unsqueeze(2)
+
+                    # Process targets using pi
+                    max_assigned_units, matched_gt_inds = torch.max(pi, dim=1)
+                    matched_gt_inds = matched_gt_inds // k
+                    fg_mask = matched_gt_inds < m
 
                 if indices_only:
                     # Produce indices as a list of tuples
@@ -1080,9 +1189,6 @@ class OptimalTransport(nn.Module):
 
                 if not training:
                     raise NotImplementedError()
-
-
-
 
                 # Normalization factor for giou and bbox
                 num_foregrounds = fg_mask.sum()
@@ -1158,7 +1264,6 @@ class SinkhornDistance(torch.nn.Module):
           P_1 locations x in R^{D_1} and
           P_2 locations y in R^{D_2}`,
         outputs an approximation of the regularized OT cost for point clouds.
-
         Args:
         eps (float): regularization coefficient
         max_iter (int): maximum number of Sinkhorn iterations
@@ -1169,13 +1274,12 @@ class SinkhornDistance(torch.nn.Module):
             'mean': the sum of the output will be divided by the number of
               elements in the output,
             'sum': the output will be summed. Default: 'none'
-
         Shape:
             - Input: :math:`(N, P_1, D_1)`, :math:`(N, P_2, D_2)`
             - Output: :math:`(N)` or :math:`()`, depending on `reduction`
     """
 
-    def __init__(self, eps=SINKHORN_MAX_ITER_eps, max_iter=SINKHORN_MAX_ITER, reduction='none'):
+    def __init__(self, eps=1e-2, max_iter=1000, reduction='none'):
         super(SinkhornDistance, self).__init__()
         self.eps = eps
         self.max_iter = max_iter
@@ -1186,23 +1290,17 @@ class SinkhornDistance(torch.nn.Module):
         mu: supplying vector s      [m+1] (num_gt_relations + 1)
         nu: demanding vector d      [n] (num_queries)              n = 100
         C: costs matrix             [m+1, n]
-
         output shape: [m+1, n] (the same as that of cost matrix)
-
         maximum numbers of gt relations is 454
         maximum numbers of gt objects is 22
-
         It is expected to have the same number of predictions and ground truth
             relations. However, there might sometimes be fewer relations
             in the ground truth.
-
         n − m × k > 0
         n cannot be very large, so k must be very small (<1)
-
         On average, k = 0.1 seems appropriate.
         If possible, increase num_queries so that the model can
         produce enough predictions.
-
         '''
         u = torch.ones_like(mu)
         v = torch.ones_like(nu)
