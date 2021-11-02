@@ -5,6 +5,7 @@ index_of_that_image = 2
 # Train or validate on a subset of the complete dataset.
 USE_SMALL_ANNOTATION_FILE = False
 small_annotation_file = 'small_train_combined.odgt'
+#small_annotation_file = 'medium_train_combined.odgt'
 USE_SMALL_VALID_ANNOTATION_FILE = False
 small_valid_annotation_file = 'small_valid_combined.odgt'
 
@@ -36,27 +37,23 @@ object_th_debug = 0
 hoi_th_debug = 0
 occlusion_th_debug = 0
 
-num_workers_train = 16 # Not implemented yet
-batch_size_train = 5 # Not implemented yet
-
-
 # num_workers and batch size for the validation and test sets
 num_workers_validation = 2 # 16
 batch_size_validation = 10  # 30
 
 
 # Whether to use optimal transport. If not, use the Hungarian matcher.
-USE_OPTIMAL_TRANSPORT = True
+USE_OPTIMAL_TRANSPORT = False
 # k in optimal transport
 OT_k = 3
-
+# Parameters for class SinkhornDistance
+SINKHORN_MAX_ITER_eps = 0.00001 # default is 1e-3
+SINKHORN_MAX_ITER = 10000 # default is 100
 
 BACK_PROP_SINKHORN_COST = False
 
 USE_DYNAMIC_K_ESTIMATE = False
-
 HUNGARIAN_K_ASSIGNMENTS = False
-
 BG_COEF = 0.0
 
 
