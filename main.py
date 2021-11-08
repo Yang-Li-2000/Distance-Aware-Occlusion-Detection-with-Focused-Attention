@@ -31,7 +31,7 @@ from models.hoitr import OptimalTransport
 
 
 
-def create_log_dir(checkpoint='checkpoint', log_path='/data/LOG/train_log'):
+def create_log_dir(checkpoint='checkpoint', log_path='~'):
     base_dir = os.path.join(log_path, getpass.getuser())
     exp_name = os.path.basename(os.path.abspath('.'))
     log_dir = os.path.join(base_dir, exp_name)
