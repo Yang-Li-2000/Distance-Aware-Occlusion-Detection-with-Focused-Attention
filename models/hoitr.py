@@ -64,7 +64,7 @@ class HoiTR(nn.Module):
         self.action_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
         self.occlusion_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
 
-    def forward(self, samples: NestedTensor, pos_depth=None):
+    def forward(self, samples: NestedTensor, pos_depth=None, writer=None):
         """ The forward expects a NestedTensor, which consists of:
                - samples.tensor: batched images, of shape
                     [batch_size x 3 x H x W]
@@ -101,6 +101,8 @@ class HoiTR(nn.Module):
             # Add pos_depth to positional encoding
             pos[-1] = pos[-1] + pos_depth
 
+        writer.add_image("image", samples.tensors[0])
+
         if CASCADE:
             hs, distance_decoder_out, occlusion_decoder_out = \
                 self.transformer(self.input_proj(src), mask, self.query_embed.weight,
@@ -108,7 +110,7 @@ class HoiTR(nn.Module):
         else:
             hs = \
                 self.transformer(self.input_proj(src), mask, self.query_embed.weight,
-                                 pos[-1])[0]
+                                 pos[-1], writer=writer)[0]
 
         human_outputs_class = self.human_cls_embed(hs)
         human_outputs_coord = self.human_box_embed(hs).sigmoid()

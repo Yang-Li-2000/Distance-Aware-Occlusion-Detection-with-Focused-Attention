@@ -170,7 +170,7 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
             gc.collect()
 
         # Forward pass
-        outputs = model(samples, pos_depth=pos_depth)
+        outputs = model(samples, pos_depth=pos_depth, writer=writer)
 
         loss_dict = criterion(outputs, targets, optimal_transport=optimal_transport)
         weight_dict = criterion.weight_dict
