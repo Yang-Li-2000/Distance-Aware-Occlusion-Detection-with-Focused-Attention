@@ -67,6 +67,9 @@ def get_args_parser():
                         help="Number of encoding layers in the transformer")
     parser.add_argument('--dec_layers', default=6, type=int,
                         help="Number of decoding layers in the transformer")
+    parser.add_argument('--dec_layers_distance', default=3, type=int)
+    parser.add_argument('--dec_layers_occlusion', default=3, type=int)
+
     parser.add_argument('--dim_feedforward', default=2048, type=int,
                         help="Intermediate size of the feedforward layers in the transformer blocks")
     parser.add_argument('--hidden_dim', default=256, type=int,
@@ -144,8 +147,12 @@ def main(args):
 
     print()
     print("USE_OPTIMAL_TRANSPORT:", USE_OPTIMAL_TRANSPORT)
-    print()
     print("USE_DEPTH_DURING_TRAINING:", USE_DEPTH_DURING_TRAINING)
+    print("CASCADE:", CASCADE)
+    if CASCADE:
+        print("dec_layers | dec_layers_distance | dec_layers_distance: ")
+        print(args.dec_layers, "         |", args.dec_layers_distance, "                  |", args.dec_layers_distance)
+    print()
 
     # Create summary writer for tensorboard
     # It will recorde stats such as losses and lr to tensorboard
@@ -257,9 +264,7 @@ def main(args):
                                    worker_init_fn=set_worker_sharing_strategy)
 
     # Load from pretrained DETR model.
-    if args.num_queries == 100 and args.enc_layers == 6:
-        assert args.num_queries == 100, args.num_queries
-        assert args.enc_layers == 6 and args.dec_layers == 6
+    if args.num_queries == 100 and args.enc_layers == 6 and args.dec_layers == 6:
         assert args.backbone in ['resnet50', 'resnet101', 'swin'], args.backbone
         if args.backbone == 'resnet50':
             pretrain_model = './data/detr_coco/detr-r50-e632da11.pth'

@@ -13,12 +13,16 @@ from typing import Optional, List
 import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
+from magic_numbers import *
 
 
 class Transformer(nn.Module):
 
     def __init__(self, d_model=512, nhead=8, num_encoder_layers=6,
-                 num_decoder_layers=6, dim_feedforward=2048, dropout=0.1,
+                 num_decoder_layers=6,
+                 num_decoder_layer_distance=3,
+                 num_decoder_layer_occlusion=3,
+                 dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False,
                  return_intermediate_dec=False):
         super().__init__()
@@ -33,6 +37,19 @@ class Transformer(nn.Module):
         decoder_norm = nn.LayerNorm(d_model)
         self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm,
                                           return_intermediate=return_intermediate_dec)
+        if CASCADE:
+            # Decoder for distance
+            distance_decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward,
+                                                             dropout, activation, normalize_before)
+            distance_decoder_norm = nn.LayerNorm(d_model)
+            self.distance_decoder = TransformerDecoder(distance_decoder_layer, num_decoder_layer_distance, distance_decoder_norm,
+                                                       return_intermediate=return_intermediate_dec)
+            # Decoder for occlusion
+            occlusion_decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward,
+                                                              dropout, activation, normalize_before)
+            occlusion_decoder_norm = nn.LayerNorm(d_model)
+            self.occlusion_decoder = TransformerDecoder(occlusion_decoder_layer, num_decoder_layer_occlusion, occlusion_decoder_norm,
+                                                        return_intermediate=return_intermediate_dec)
 
         self._reset_parameters()
 
@@ -56,7 +73,27 @@ class Transformer(nn.Module):
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
         hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,
                           pos=pos_embed, query_pos=query_embed)
-        return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
+        if not CASCADE:
+            return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
+        else:
+            hs = hs.transpose(1, 2)
+            # Distance
+            distance_query_embed = hs[-1]
+            distance_query_embed = distance_query_embed.permute(1, 0, 2)
+            distance_tgt = torch.zeros_like(distance_query_embed)
+            distance_decoder_out = self.distance_decoder(distance_tgt, memory, memory_key_padding_mask=mask,
+                                                         pos=pos_embed, query_pos=distance_query_embed)
+            distance_decoder_out = distance_decoder_out.transpose(1, 2)
+
+            # Occlusion
+            occlusion_query_embed = hs[-1]
+            occlusion_query_embed = occlusion_query_embed.permute(1, 0, 2)
+            occlusion_tgt = torch.zeros_like(occlusion_query_embed)
+            occlusion_decoder_out = self.occlusion_decoder(occlusion_tgt, memory, memory_key_padding_mask=mask,
+                                                           pos=pos_embed, query_pos=occlusion_query_embed)
+            occlusion_decoder_out = occlusion_decoder_out.transpose(1, 2)
+
+            return hs, distance_decoder_out, occlusion_decoder_out, memory.permute(1, 2, 0).view(bs, c, h, w)
 
 
 class TransformerEncoder(nn.Module):
@@ -281,6 +318,8 @@ def build_transformer(args):
         dim_feedforward=args.dim_feedforward,
         num_encoder_layers=args.enc_layers,
         num_decoder_layers=args.dec_layers,
+        num_decoder_layer_distance=args.dec_layers_distance,
+        num_decoder_layer_occlusion=args.dec_layers_occlusion,
         normalize_before=args.pre_norm,
         return_intermediate_dec=True,
     )
