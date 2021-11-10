@@ -71,9 +71,9 @@ class Transformer(nn.Module):
 
         tgt = torch.zeros_like(query_embed)
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
-        print("w,h:", w, h)
         hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,
-                          pos=pos_embed, query_pos=query_embed, writer=writer)
+                          pos=pos_embed, query_pos=query_embed, writer=writer,
+                          shape=(bs, c, h, w))
         if not CASCADE:
             return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
         else:
@@ -137,21 +137,27 @@ class TransformerDecoder(nn.Module):
                 memory_key_padding_mask: Optional[Tensor] = None,
                 pos: Optional[Tensor] = None,
                 query_pos: Optional[Tensor] = None,
-                writer=None):
+                writer=None,
+                shape=None):
         output = tgt
 
         intermediate = []
 
+        layer_index = 0
         for layer in self.layers:
             output = layer(output, memory, tgt_mask=tgt_mask,
                            memory_mask=memory_mask,
                            tgt_key_padding_mask=tgt_key_padding_mask,
                            memory_key_padding_mask=memory_key_padding_mask,
                            pos=pos, query_pos=query_pos,
-                           writer=writer)
+                           writer=writer,
+                           shape=shape,
+                           layer_index=layer_index)
+            layer_index += 1
             if self.return_intermediate:
                 intermediate.append(self.norm(output))
-
+        if VISUALIZE_ATTENTION_WEIGHTS:
+            breakpoint()
         if self.norm is not None:
             output = self.norm(output)
             if self.return_intermediate:
@@ -256,7 +262,9 @@ class TransformerDecoderLayer(nn.Module):
                      memory_key_padding_mask: Optional[Tensor] = None,
                      pos: Optional[Tensor] = None,
                      query_pos: Optional[Tensor] = None,
-                     writer=None):
+                     writer=None,
+                     shape=None,
+                     layer_index=-1):
         q = k = self.with_pos_embed(tgt, query_pos)
         tgt2 = self.self_attn(q, k, value=tgt, attn_mask=tgt_mask,
                               key_padding_mask=tgt_key_padding_mask)[0]
@@ -270,9 +278,12 @@ class TransformerDecoderLayer(nn.Module):
                                    key=self.with_pos_embed(memory, pos),
                                    value=memory, attn_mask=memory_mask,
                                    key_padding_mask=memory_key_padding_mask)[1]
-        for i in range(100):
-            writer.add_image('att weights', attention_weights[0][i].view(23,31) * 255, dataformats='HW', global_step=i)
-        raise NotImplementedError()
+        if VISUALIZE_ATTENTION_WEIGHTS:
+            bs, c, h, w = shape
+            #writer.add_images('attention weights ' + str(layer_index), attention_weights[0].view(100, h, w).unsqueeze(1), dataformats='NCHW')
+            for i in range(100):
+                #writer.add_image('attention weights ' + str(layer_index), attention_weights[0][i].view(h, w) * 255, dataformats='HW', global_step=i)
+                writer.add_image('attention weights ' + str(layer_index) + '/' + str(i), attention_weights[0][i].view(h, w) * 255, dataformats='HW')
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
@@ -310,12 +321,14 @@ class TransformerDecoderLayer(nn.Module):
                 memory_key_padding_mask: Optional[Tensor] = None,
                 pos: Optional[Tensor] = None,
                 query_pos: Optional[Tensor] = None,
-                writer=None):
+                writer=None,
+                shape=None,
+                layer_index=None):
         if self.normalize_before:
             return self.forward_pre(tgt, memory, tgt_mask, memory_mask,
                                     tgt_key_padding_mask, memory_key_padding_mask, pos, query_pos)
         return self.forward_post(tgt, memory, tgt_mask, memory_mask,
-                                 tgt_key_padding_mask, memory_key_padding_mask, pos, query_pos, writer)
+                                 tgt_key_padding_mask, memory_key_padding_mask, pos, query_pos, writer, shape, layer_index)
 
 
 def _get_clones(module, N):

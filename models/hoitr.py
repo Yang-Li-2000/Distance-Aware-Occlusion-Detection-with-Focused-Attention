@@ -101,7 +101,11 @@ class HoiTR(nn.Module):
             # Add pos_depth to positional encoding
             pos[-1] = pos[-1] + pos_depth
 
-        writer.add_image("image", samples.tensors[0])
+        if VISUALIZE_ATTENTION_WEIGHTS:
+            device = samples.tensors.device
+            mean = torch.tensor([0.38582161319756497, 0.417059363143913, 0.44746641122649666]).unsqueeze(1).unsqueeze(1).to(device)
+            std = torch.tensor([0.2928927708221023, 0.28587472243230755, 0.2924566717392719]).unsqueeze(1).unsqueeze(1).to(device)
+            writer.add_image("image", samples.tensors[0] * std + mean)
 
         if CASCADE:
             hs, distance_decoder_out, occlusion_decoder_out = \
