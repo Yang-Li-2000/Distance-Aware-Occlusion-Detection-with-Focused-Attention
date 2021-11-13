@@ -29,6 +29,10 @@ from torch.utils.tensorboard import SummaryWriter
 
 from models.hoitr import OptimalTransport
 
+# increase ulimit
+import resource
+rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+resource.setrlimit(resource.RLIMIT_NOFILE, (rlimit[1], rlimit[1]))
 
 
 def create_log_dir(checkpoint='checkpoint', log_path='~'):

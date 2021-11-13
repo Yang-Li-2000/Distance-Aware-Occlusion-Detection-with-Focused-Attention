@@ -484,7 +484,8 @@ def make_hico_transforms(image_set, test_scale=-1):
 class two_point_five_VRD(VisionDataset):
     def __init__(self, root, annFile, image_set, transform=None, target_transform=None, transforms=None):
         super(two_point_five_VRD, self).__init__(root, transforms, transform, target_transform)
-        self.annotations = [parse_one_gt_line(l.strip()) for l in open(annFile, 'r').readlines()]
+        with open(annFile, 'r') as f:
+            self.annotations = [parse_one_gt_line(l.strip()) for l in f.readlines()]
         self.transforms = transforms
         self.image_set = image_set
         self.image_folder_name = self.image_set
