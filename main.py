@@ -151,6 +151,7 @@ def main(args):
     device = torch.device(args.device)
 
     print()
+    print("USE_SMALL_ANNOTATION_FILE:", USE_SMALL_ANNOTATION_FILE)
     print("USE_OPTIMAL_TRANSPORT:", USE_OPTIMAL_TRANSPORT)
     print("USE_DEPTH_DURING_TRAINING:", USE_DEPTH_DURING_TRAINING)
     print("CASCADE:", CASCADE)
@@ -320,6 +321,7 @@ def main(args):
             sampler_train.set_epoch(epoch)
         if epoch == 0 and not USE_SMALL_VALID_ANNOTATION_FILE and not USE_SMALL_ANNOTATION_FILE:
             # Validate before training
+            print("Validate before training:")
             with torch.no_grad():
                 validate(args, writer, 'valid', model, criterion, data_loader_valid, optimizer,
                          device, -1, args.clip_max_norm)

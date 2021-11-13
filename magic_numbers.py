@@ -4,8 +4,8 @@ index_of_that_image = 2
 
 # Train or validate on a subset of the complete dataset.
 USE_SMALL_ANNOTATION_FILE = False
-#small_annotation_file = 'small_train_combined.odgt'
-small_annotation_file = 'medium_train_combined.odgt'
+small_annotation_file = 'small_train_combined.odgt'
+#small_annotation_file = 'medium_train_combined.odgt'
 USE_SMALL_VALID_ANNOTATION_FILE = False
 small_valid_annotation_file = 'small_valid_combined.odgt'
 

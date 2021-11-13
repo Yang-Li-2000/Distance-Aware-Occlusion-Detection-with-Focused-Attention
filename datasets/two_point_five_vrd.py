@@ -536,6 +536,21 @@ class two_point_five_VRD(VisionDataset):
         org_size = target['org_size']
         num_bounding_boxes_in_ground_truth = target['num_bounding_boxes_in_ground_truth']
 
+        # Compute interaction boxes
+        xmin = torch.max(human_boxes[:, 0], object_boxes[:, 0])
+        ymin = torch.max(human_boxes[:, 1], object_boxes[:, 1])
+        xmax = torch.min(human_boxes[:, 0] + human_boxes[:, 2], object_boxes[:, 0] + object_boxes[:, 2])
+        ymax = torch.min(human_boxes[:, 1] + human_boxes[:, 3], object_boxes[:, 1] + object_boxes[:, 3])
+        # address negative width and height by swapping min and max
+        xmin_adjusted = torch.min(xmin, xmax)
+        xmax_adjusted = torch.max(xmin, xmax)
+        ymin_adjusted = torch.min(ymin, ymax)
+        ymax_adjusted = torch.max(ymin, ymax)
+        w = xmax_adjusted - xmin_adjusted
+        h = ymax_adjusted - ymin_adjusted
+        intersection_boxes = torch.vstack([xmin_adjusted, ymin_adjusted, w, h]).T
+
+
         image_id = np.array(image_id)
         num_bounding_boxes_in_ground_truth = torch.tensor(num_bounding_boxes_in_ground_truth)
 
@@ -543,7 +558,7 @@ class two_point_five_VRD(VisionDataset):
         del target
         gc.collect()
 
-        return img, depth, human_boxes, human_labels, object_boxes, object_labels, action_boxes, action_labels, occlusion_labels, image_id, org_size, num_bounding_boxes_in_ground_truth
+        return img, depth, human_boxes, human_labels, object_boxes, object_labels, action_boxes, action_labels, occlusion_labels, image_id, org_size, num_bounding_boxes_in_ground_truth, intersection_boxes
 
     def __len__(self):
         return len(self.annotations)
