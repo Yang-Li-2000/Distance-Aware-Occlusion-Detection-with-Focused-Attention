@@ -43,9 +43,9 @@ batch_size_validation = 10  # 30
 
 
 # Whether to use optimal transport. If not, use the Hungarian matcher.
-USE_OPTIMAL_TRANSPORT = False
+USE_OPTIMAL_TRANSPORT = True
 # k in optimal transport
-OT_k = 4
+OT_k = 8
 # Parameters for class SinkhornDistance
 SINKHORN_MAX_ITER_eps = 0.01 # default is 1e-3
 SINKHORN_MAX_ITER = 1000 # default is 100
@@ -57,8 +57,8 @@ NORMALIZED_MAX = False
 BG_COEF = 0.0
 
 
-USE_DEPTH_DURING_TRAINING = False
-USE_DEPTH_DURING_INFERENCE = False
+USE_DEPTH_DURING_TRAINING = True
+USE_DEPTH_DURING_INFERENCE = True
 
 
 LR_RANGE_TEST = False
@@ -70,6 +70,6 @@ CYCLIC_STEP_SIZE_UP = 5
 CYCLIC_STEP_SIZE_DOWN = 5
 
 
-CASCADE = True
+CASCADE = False
 
-VISUALIZE_ATTENTION_WEIGHTS = True
+VISUALIZE_ATTENTION_WEIGHTS = False

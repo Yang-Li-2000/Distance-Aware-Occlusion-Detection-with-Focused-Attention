@@ -122,14 +122,16 @@ class HoiTR(nn.Module):
         object_outputs_class = self.object_cls_embed(hs)
         object_outputs_coord = self.object_box_embed(hs).sigmoid()
 
+
         if CASCADE:
             action_outputs_class = self.action_cls_embed(distance_decoder_out)
             occlusion_outputs_class = self.occlusion_cls_embed(occlusion_decoder_out)
-            intersection_outputs_coord = self.intersection_box_embed(occlusion_decoder_out)
+            intersection_outputs_coord = self.intersection_box_embed(occlusion_decoder_out).sigmoid()
         else:
             action_outputs_class = self.action_cls_embed(hs)
             occlusion_outputs_class = self.occlusion_cls_embed(hs)
-            intersection_outputs_coord = self.intersection_box_embed(hs)
+            intersection_outputs_coord = self.intersection_box_embed(hs).sigmoid()
+
 
 
         out = {
@@ -814,7 +816,7 @@ class OptimalTransport(nn.Module):
 
         beta_1, beta_2 = 1.2, 1
         if training:
-            alpha_h, alpha_o, alpha_r = 1, 1, 2
+            alpha_h, alpha_o, alpha_r = 1, 1, 0
         else:
             alpha_h, alpha_o, alpha_r = 1, 1, 2
 
