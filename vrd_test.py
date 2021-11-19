@@ -43,6 +43,8 @@ def get_args_parser():
                         help="Number of encoding layers in the transformer")
     parser.add_argument('--dec_layers', default=6, type=int,
                         help="Number of decoding layers in the transformer")
+    parser.add_argument('--dec_layers_distance', default=3, type=int)
+    parser.add_argument('--dec_layers_occlusion', default=3, type=int)
     parser.add_argument('--dim_feedforward', default=2048, type=int,
                         help="Intermediate size of the feedforward layers in the transformer blocks")
     parser.add_argument('--hidden_dim', default=256, type=int,
@@ -99,7 +101,12 @@ def get_args_parser():
 def main(args):
 
     print()
+    print("USE_SMALL_VALID_ANNOTATION_FILE: ", USE_SMALL_VALID_ANNOTATION_FILE)
     print("USE_DEPTH_DURING_INFERENCE: ", USE_DEPTH_DURING_INFERENCE)
+    print("CASCADE:", CASCADE)
+    if CASCADE:
+        print("dec_layers | dec_layers_distance | dec_layers_distance: ")
+        print(args.dec_layers, "         |", args.dec_layers_distance, "                  |", args.dec_layers_distance)
     print()
 
     device = torch.device(args.device)
