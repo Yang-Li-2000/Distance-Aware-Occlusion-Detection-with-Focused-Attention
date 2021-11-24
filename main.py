@@ -138,6 +138,7 @@ def get_args_parser():
                                  'small_cascade',
                                  'small_maskrcnn'])
     parser.add_argument('--manual_lr_change', type=float)
+    parser.add_argument('--manual_lr_backbone_change', type=float)
 
     # Experiment name
     parser.add_argument('--experiment_name', default='')
@@ -244,7 +245,8 @@ def main(args):
                                    batch_sampler=batch_sampler_train,
                                    collate_fn=utils.collate_fn,
                                    num_workers=args.num_workers,
-                                   worker_init_fn=set_worker_sharing_strategy)
+                                   worker_init_fn=set_worker_sharing_strategy,
+                                   persistent_workers=True)
 
     # (For debugging purpose) create a sequential sampler
     sequential_data_loader_train = DataLoader(dataset_train,
@@ -300,9 +302,11 @@ def main(args):
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
         if args.manual_lr_change:
-            for g in optimizer.param_groups:
-                g['lr'] = args.manual_lr_change
+            optimizer.param_groups[0]['lr'] = args.manual_lr_change
             print('Changed lr to', args.manual_lr_change)
+        if args.manual_lr_backbone_change:
+            optimizer.param_groups[1]['lr'] = args.manual_lr_backbone_change
+            print('Changed lr_backbone to', args.manual_lr_backbone_change)
 
 
     ############################################################################
