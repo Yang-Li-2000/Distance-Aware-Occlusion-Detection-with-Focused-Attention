@@ -17,7 +17,7 @@ import gc
 
 # This partially addresses the EOF Error
 import torch.multiprocessing
-torch.multiprocessing.set_sharing_strategy('file_system')
+torch.multiprocessing.set_sharing_strategy(sharing_strategy)
 
 # Load class_descriptions_boxable
 class_descriptions_boxable = pd.read_csv('data/2.5vrd/class-descriptions-boxable.csv', header=None)

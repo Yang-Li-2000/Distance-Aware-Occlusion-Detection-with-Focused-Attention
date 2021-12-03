@@ -235,7 +235,6 @@ def main(args):
                                                         drop_last=True)
 
     # This partially addresses the EOF Error
-    sharing_strategy = "file_system"
     torch.multiprocessing.set_sharing_strategy(sharing_strategy)
 
     def set_worker_sharing_strategy(worker_id: int) -> None:
@@ -246,7 +245,7 @@ def main(args):
                                    collate_fn=utils.collate_fn,
                                    num_workers=args.num_workers,
                                    worker_init_fn=set_worker_sharing_strategy,
-                                   persistent_workers=True)
+                                   persistent_workers=False)
 
     # (For debugging purpose) create a sequential sampler
     sequential_data_loader_train = DataLoader(dataset_train,
@@ -339,21 +338,6 @@ def main(args):
                                       use_optimal_transport=USE_OPTIMAL_TRANSPORT,
                                       lr_scheduler = lr_scheduler)
         lr_scheduler.step()
-
-        # Save preliminary checkpoint
-        # before validating so that we have a checkpoint
-        # if the program encounters errors during validation
-        if args.output_dir:
-            checkpoint_name = 'preliminary_checkpoint_epoch_' + str(epoch) + '.pth'
-            checkpoint_paths = [output_dir / checkpoint_name]
-            for checkpoint_path in checkpoint_paths:
-                utils.save_on_master({
-                    'model': model_without_ddp.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'lr_scheduler': lr_scheduler.state_dict(),
-                    'epoch': epoch,
-                    'args': args,
-                }, checkpoint_path)
 
         # Validate
         with torch.no_grad():
