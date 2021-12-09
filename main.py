@@ -159,6 +159,7 @@ def main(args):
     if CASCADE:
         print("dec_layers | dec_layers_distance | dec_layers_distance: ")
         print(args.dec_layers, "         |", args.dec_layers_distance, "                  |", args.dec_layers_distance)
+    print("eos_coef:", args.eos_coef)
     print()
 
     # Create summary writer for tensorboard
