@@ -155,6 +155,7 @@ def main(args):
     print("USE_SMALL_ANNOTATION_FILE:", USE_SMALL_ANNOTATION_FILE)
     print("USE_OPTIMAL_TRANSPORT:", USE_OPTIMAL_TRANSPORT)
     print("USE_DEPTH_DURING_TRAINING:", USE_DEPTH_DURING_TRAINING)
+    print("PREDICT_INTERSECTION_BOX:", PREDICT_INTERSECTION_BOX)
     print("CASCADE:", CASCADE)
     if CASCADE:
         print("dec_layers | dec_layers_distance | dec_layers_distance: ")
