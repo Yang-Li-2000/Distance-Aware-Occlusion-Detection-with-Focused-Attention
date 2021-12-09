@@ -11,6 +11,7 @@ USE_SMALL_ANNOTATION_FILE = False
 small_annotation_file = 'medium_train_combined.odgt'
 USE_SMALL_VALID_ANNOTATION_FILE = False
 small_valid_annotation_file = 'small_valid_combined.odgt'
+#small_valid_annotation_file = 'small_valid_combined_custom.odgt'
 
 # Disable shuffle or not. Useful for debugging.
 USE_SEQUENTIAL_LOADER = False
