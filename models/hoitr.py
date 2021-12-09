@@ -63,6 +63,8 @@ class HoiTR(nn.Module):
         self.object_box_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.action_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
         self.occlusion_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
+        if PREDICT_INTERSECTION_BOX:
+            self.intersection_box_embed = MLP(hidden_dim, hidden_dim, 4, 3)
 
     def forward(self, samples: NestedTensor, pos_depth=None, writer=None):
         """ The forward expects a NestedTensor, which consists of:
@@ -120,12 +122,18 @@ class HoiTR(nn.Module):
         human_outputs_coord = self.human_box_embed(hs).sigmoid()
         object_outputs_class = self.object_cls_embed(hs)
         object_outputs_coord = self.object_box_embed(hs).sigmoid()
+
+
         if CASCADE:
             action_outputs_class = self.action_cls_embed(distance_decoder_out)
             occlusion_outputs_class = self.occlusion_cls_embed(occlusion_decoder_out)
+            if PREDICT_INTERSECTION_BOX:
+                intersection_outputs_coord = self.intersection_box_embed(occlusion_decoder_out).sigmoid()
         else:
             action_outputs_class = self.action_cls_embed(hs)
             occlusion_outputs_class = self.occlusion_cls_embed(hs)
+            if PREDICT_INTERSECTION_BOX:
+                intersection_outputs_coord = self.intersection_box_embed(hs).sigmoid()
 
         out = {
             'human_pred_logits': human_outputs_class[-1],
@@ -136,15 +144,30 @@ class HoiTR(nn.Module):
             'occlusion_pred_logits': occlusion_outputs_class[-1]
         }
 
+        if PREDICT_INTERSECTION_BOX:
+            out['intersection_pred_boxes'] = intersection_outputs_coord[-1]
+
         if self.aux_loss:
-            out['aux_outputs'] = self._set_aux_loss(
-                human_outputs_class,
-                human_outputs_coord,
-                object_outputs_class,
-                object_outputs_coord,
-                action_outputs_class,
-                occlusion_outputs_class
-            )
+            if PREDICT_INTERSECTION_BOX:
+                out['aux_outputs'] = self._set_aux_loss_intersection(
+                    human_outputs_class,
+                    human_outputs_coord,
+                    object_outputs_class,
+                    object_outputs_coord,
+                    action_outputs_class,
+                    occlusion_outputs_class,
+                    intersection_outputs_coord
+                )
+            else:
+                out['aux_outputs'] = self._set_aux_loss(
+                    human_outputs_class,
+                    human_outputs_coord,
+                    object_outputs_class,
+                    object_outputs_coord,
+                    action_outputs_class,
+                    occlusion_outputs_class
+                )
+
         return out
 
     @torch.jit.unused
@@ -165,14 +188,14 @@ class HoiTR(nn.Module):
             'object_pred_logits': c,
             'object_pred_boxes': d,
             'action_pred_logits': e,
-            'occlusion_pred_logits': f,
+            'occlusion_pred_logits': f
         } for
             a,
             b,
             c,
             d,
             e,
-            f,
+            f
             in zip(
                 human_outputs_class[:-1],
                 human_outputs_coord[:-1],
@@ -180,6 +203,45 @@ class HoiTR(nn.Module):
                 object_outputs_coord[:-1],
                 action_outputs_class[:-1],
                 occlusion_outputs_class[:-1]
+            )]
+
+    @torch.jit.unused
+    def _set_aux_loss_intersection(self,
+                      human_outputs_class,
+                      human_outputs_coord,
+                      object_outputs_class,
+                      object_outputs_coord,
+                      action_outputs_class,
+                      occlusion_outputs_class,
+                      intersection_outputs_coord
+                      ):
+        # this is a workaround to make torchscript happy, as torchscript
+        # doesn't support dictionary with non-homogeneous values, such
+        # as a dict having both a Tensor and a list.
+        return [{
+            'human_pred_logits': a,
+            'human_pred_boxes': b,
+            'object_pred_logits': c,
+            'object_pred_boxes': d,
+            'action_pred_logits': e,
+            'occlusion_pred_logits': f,
+            'intersection_pred_boxes': g
+        } for
+            a,
+            b,
+            c,
+            d,
+            e,
+            f,
+            g
+            in zip(
+                human_outputs_class[:-1],
+                human_outputs_coord[:-1],
+                object_outputs_class[:-1],
+                object_outputs_coord[:-1],
+                action_outputs_class[:-1],
+                occlusion_outputs_class[:-1],
+                intersection_outputs_coord[:-1]
             )]
 
 
@@ -366,16 +428,29 @@ class SetCriterion(nn.Module):
             [t['object_boxes'][i] for t, (_, i) in zip(targets, indices)],
             dim=0)
 
+
         human_loss_bbox = F.l1_loss(human_src_boxes, human_target_boxes,
                                     reduction='none')
         object_loss_bbox = F.l1_loss(object_src_boxes, object_target_boxes,
                                      reduction='none')
+        if PREDICT_INTERSECTION_BOX:
+            intersection_src_boxes = outputs['intersection_pred_boxes'][idx]
+            intersection_target_boxes = torch.cat(
+                [t['intersection_boxes'][i] for t, (_, i) in zip(targets, indices)],
+                dim=0)
+            intersection_loss_bbox = F.l1_loss(intersection_src_boxes, intersection_target_boxes,
+                                    reduction='none')
 
         losses = dict()
         losses['human_loss_bbox'] = human_loss_bbox.sum() / num_boxes
         losses['object_loss_bbox'] = object_loss_bbox.sum() / num_boxes
-        losses['loss_bbox'] = losses['human_loss_bbox'] + losses[
-            'object_loss_bbox']
+        if PREDICT_INTERSECTION_BOX:
+            losses['intersection_loss_bbox'] = intersection_loss_bbox.sum() / num_boxes
+            losses['loss_bbox'] = losses['human_loss_bbox'] + losses[
+                'object_loss_bbox'] + losses['intersection_loss_bbox']
+        else:
+            losses['loss_bbox'] = losses['human_loss_bbox'] + losses[
+                'object_loss_bbox']
 
         human_loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
             box_ops.box_cxcywh_to_xyxy(human_src_boxes),
@@ -383,11 +458,21 @@ class SetCriterion(nn.Module):
         object_loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
             box_ops.box_cxcywh_to_xyxy(object_src_boxes),
             box_ops.box_cxcywh_to_xyxy(object_target_boxes)))
+        if PREDICT_INTERSECTION_BOX:
+            intersection_loss_giou = 1 - torch.diag(box_ops.generalized_box_iou(
+                box_ops.box_cxcywh_to_xyxy(intersection_src_boxes),
+                box_ops.box_cxcywh_to_xyxy(intersection_target_boxes)))
+
         losses['human_loss_giou'] = human_loss_giou.sum() / num_boxes
         losses['object_loss_giou'] = object_loss_giou.sum() / num_boxes
 
-        losses['loss_giou'] = losses['human_loss_giou'] + losses[
-            'object_loss_giou']
+        if PREDICT_INTERSECTION_BOX:
+            losses['intersection_loss_giou'] = intersection_loss_giou.sum() / num_boxes
+            losses['loss_giou'] = losses['human_loss_giou'] + losses[
+                'object_loss_giou'] + losses['intersection_loss_giou']
+        else:
+            losses['loss_giou'] = losses['human_loss_giou'] + losses[
+                'object_loss_giou']
         return losses
 
     def _get_src_permutation_idx(self, indices):
@@ -828,11 +913,16 @@ class OptimalTransport(nn.Module):
         object_target_boxes = store_to_list('object_boxes')
 
         if training:
+            if PREDICT_INTERSECTION_BOX:
+                intersection_src_boxes = outputs['intersection_pred_boxes']
+                intersection_target_boxes = store_to_list('intersection_boxes')
+
             # the first target
             human_target_boxes_1 = human_target_boxes[:, 0:4].unsqueeze(
                 1).expand(-1, num_queries, -1)
             object_target_boxes_1 = object_target_boxes[:, 0:4].unsqueeze(
                 1).expand(-1, num_queries, -1)
+
             loss_human_boxes_1 = F.l1_loss(human_src_boxes, human_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
             loss_object_boxes_1 = F.l1_loss(object_src_boxes, object_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
             human_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(
@@ -848,13 +938,26 @@ class OptimalTransport(nn.Module):
             object_loss_giou_1 \
                 = object_loss_giou_1.reshape(-1, num_queries).unsqueeze(1)
 
+            if PREDICT_INTERSECTION_BOX:
+                intersection_target_boxes_1 = intersection_target_boxes[:, 0:4].unsqueeze(
+                    1).expand(-1, num_queries, -1)
+                loss_intersection_boxes_1 = F.l1_loss(intersection_src_boxes, intersection_target_boxes_1, reduction='none').sum(dim=2).unsqueeze(1)
+                intersection_loss_giou_1 = (1 - torch.diag(box_ops.generalized_box_iou(
+                    box_ops.box_cxcywh_to_xyxy(intersection_src_boxes.reshape(-1, 4)),
+                    box_ops.box_cxcywh_to_xyxy(
+                        intersection_target_boxes_1.reshape(-1, 4)))))
+                intersection_loss_giou_1 = \
+                    intersection_loss_giou_1.reshape(-1, num_queries).unsqueeze(1)
+
             # the second target
             human_target_boxes_2 = human_target_boxes[:, 4:].unsqueeze(
                 1).expand(-1, self.num_queries, -1)
             object_target_boxes_2 = object_target_boxes[:, 4:].unsqueeze(
                 1).expand(-1, self.num_queries, -1)
+
             loss_human_boxes_2 = F.l1_loss(human_src_boxes, human_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
             loss_object_boxes_2 = F.l1_loss(object_src_boxes, object_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
+
             human_loss_giou_2 = (1 - torch.diag(box_ops.generalized_box_iou(
                 box_ops.box_cxcywh_to_xyxy(human_src_boxes.reshape(-1, 4)),
                 box_ops.box_cxcywh_to_xyxy(
@@ -868,13 +971,31 @@ class OptimalTransport(nn.Module):
                                                                      num_queries).unsqueeze(
                 1)
 
+            if PREDICT_INTERSECTION_BOX:
+                intersection_target_boxes_2 = intersection_target_boxes[:, 4:].unsqueeze(
+                    1).expand(-1, self.num_queries, -1)
+                loss_intersection_boxes_2 = F.l1_loss(intersection_src_boxes, intersection_target_boxes_2, reduction='none').sum(dim=2).unsqueeze(1)
+                intersection_loss_giou_2 = (1 - torch.diag(box_ops.generalized_box_iou(
+                    box_ops.box_cxcywh_to_xyxy(intersection_src_boxes.reshape(-1, 4)),
+                    box_ops.box_cxcywh_to_xyxy(
+                        intersection_target_boxes_2.reshape(-1, 4)))))
+                intersection_loss_giou_2 = \
+                    intersection_loss_giou_2.reshape(-1, num_queries).unsqueeze(1)
+
             # combine them
             human_loss_boxes = torch.cat([loss_human_boxes_1, loss_human_boxes_2], dim=1)
             object_loss_boxes = torch.cat([loss_object_boxes_1, loss_object_boxes_2], dim=1)
+
+
             human_loss_giou = torch.cat([human_loss_giou_1, human_loss_giou_2],
                                         dim=1)
             object_loss_giou = torch.cat(
                 [object_loss_giou_1, object_loss_giou_2], dim=1)
+
+            if PREDICT_INTERSECTION_BOX:
+                intersection_loss_boxes = torch.cat([loss_intersection_boxes_1, loss_intersection_boxes_2], dim=1)
+                intersection_loss_giou = torch.cat(
+                    [intersection_loss_giou_1, intersection_loss_giou_2], dim=1)
 
         else:
             raise NotImplementedError()
@@ -882,11 +1003,19 @@ class OptimalTransport(nn.Module):
         beta_1, beta_2 = 1.2, 1
         l_box_h = self.cost_bbox * human_loss_boxes + self.cost_giou * human_loss_giou
         l_box_o = self.cost_bbox * object_loss_boxes + self.cost_giou * object_loss_giou
-        l_box_all = (l_box_h + l_box_o) / 2
+
+        if PREDICT_INTERSECTION_BOX:
+            l_box_i = self.cost_bbox * intersection_loss_boxes + self.cost_giou * intersection_loss_giou
+            l_box_all = (l_box_h + l_box_o + l_box_i) / 3
+        else:
+            l_box_all = (l_box_h + l_box_o) / 2
 
         loss_reg = beta_2 * l_box_all
 
-        return loss_reg, human_target_boxes, object_target_boxes
+        if PREDICT_INTERSECTION_BOX:
+            return loss_reg, human_target_boxes, object_target_boxes, intersection_target_boxes
+        else:
+            return loss_reg, human_target_boxes, object_target_boxes
 
 
     def loss_computation(self, num_foregrounds, outputs,
@@ -1069,10 +1198,15 @@ class OptimalTransport(nn.Module):
             loss_cls, human_target_classes, object_target_classes, \
             action_target_classes, occlusion_target_classes \
                 = self.loss_cls(outputs, targets)
-            loss_reg, human_target_boxes, object_target_boxes \
-                = self.loss_reg(outputs, targets)
+            if PREDICT_INTERSECTION_BOX:
+                loss_reg, human_target_boxes, object_target_boxes, \
+                intersection_target_boxes \
+                    = self.loss_reg(outputs, targets)
+            else:
+                loss_reg, human_target_boxes, object_target_boxes \
+                    = self.loss_reg(outputs, targets)
             loss_reg = torch.cat(
-                [loss_reg, torch.zeros_like(loss_reg)[:, 0:1, :]], dim=1)
+                    [loss_reg, torch.zeros_like(loss_reg)[:, 0:1, :]], dim=1)
             cost_matrix = loss_cls + self.alpha * loss_reg
 
             if TEST_COST_MATRIX:
@@ -1125,11 +1259,17 @@ class OptimalTransport(nn.Module):
             if training or indices_only:
                 loss_cls, human_target_classes, object_target_classes, \
                 action_target_classes, occlusion_target_classes \
-                    = self.loss_cls(outputs, targets)
-                loss_reg, human_target_boxes, object_target_boxes \
-                    = self.loss_reg(outputs, targets)
+                    = self.loss_cls(outputs, targets, training)
+
+                if PREDICT_INTERSECTION_BOX:
+                    loss_reg, human_target_boxes, object_target_boxes, \
+                    intersection_target_boxes \
+                        = self.loss_reg(outputs, targets, training)
+                else:
+                    loss_reg, human_target_boxes, object_target_boxes \
+                        = self.loss_reg(outputs, targets, training)
                 loss_reg = torch.cat(
-                    [loss_reg, torch.zeros_like(loss_reg)[:, 0:1, :]], dim=1)
+                        [loss_reg, torch.zeros_like(loss_reg)[:, 0:1, :]], dim=1)
                 cost_matrix = loss_cls + self.alpha * loss_reg
 
                 if TEST_COST_MATRIX:

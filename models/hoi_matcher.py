@@ -68,6 +68,7 @@ class HungarianMatcher(nn.Module):
         action_out_prob = outputs["action_pred_logits"].flatten(0, 1).softmax(-1)  # [bs * num_queries, num_classes]
         occlusion_out_prob = outputs["occlusion_pred_logits"].flatten(0, 1).softmax(-1)
 
+
         # Also concat the target labels and boxes
         human_tgt_ids = torch.cat([v["human_labels"] for v in targets])
         human_tgt_box = torch.cat([v["human_boxes"] for v in targets])
@@ -88,6 +89,7 @@ class HungarianMatcher(nn.Module):
         human_cost_bbox = torch.cdist(human_out_bbox, human_tgt_box, p=1)
         object_cost_bbox = torch.cdist(object_out_bbox, object_tgt_box, p=1)
 
+
         # Compute the giou cost betwen boxes
         human_cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(human_out_bbox), box_cxcywh_to_xyxy(human_tgt_box))
         object_cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(object_out_bbox), box_cxcywh_to_xyxy(object_tgt_box))
@@ -101,7 +103,18 @@ class HungarianMatcher(nn.Module):
         l_box_h = self.cost_bbox * human_cost_bbox + self.cost_giou * human_cost_giou
         l_box_o = self.cost_bbox * object_cost_bbox + self.cost_giou * object_cost_giou
         l_cls_all = (l_cls_h + l_cls_o + l_cls_r + l_cls_occlusion) / (alpha_h + alpha_o + alpha_r + alpha_r)
-        l_box_all = (l_box_h + l_box_o) / 2
+
+        if "intersection_pred_boxes" in outputs:
+            intersection_out_bbox = outputs["intersection_pred_boxes"].flatten(0, 1)  # [bs * num_queries, 4]
+            intersection_tgt_box = torch.cat([v["intersection_boxes"] for v in targets])
+            intersection_cost_bbox = torch.cdist(intersection_out_bbox, intersection_tgt_box, p=1)
+            intersection_cost_giou = -generalized_box_iou(box_cxcywh_to_xyxy(intersection_out_bbox),
+                                                          box_cxcywh_to_xyxy(intersection_tgt_box))
+            l_box_i = self.cost_bbox * intersection_cost_bbox + self.cost_giou * intersection_cost_giou
+            l_box_all = (l_box_h + l_box_o + l_box_i) / 3
+        else:
+            l_box_all = (l_box_h + l_box_o) / 2
+
         C = beta_1 * l_cls_all + beta_2 * l_box_all
 
         C = C.view(bs, num_queries, -1).cpu()

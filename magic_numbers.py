@@ -49,10 +49,10 @@ batch_size_validation = 10  # 30
 # Whether to use optimal transport. If not, use the Hungarian matcher.
 USE_OPTIMAL_TRANSPORT = False
 # k in optimal transport
-OT_k = 3
+OT_k = 8
 # Parameters for class SinkhornDistance
-SINKHORN_MAX_ITER_eps = 0.00001 # default is 1e-3
-SINKHORN_MAX_ITER = 10000 # default is 100
+SINKHORN_MAX_ITER_eps = 0.01 # default is 1e-3
+SINKHORN_MAX_ITER = 1000 # default is 100
 
 BACK_PROP_SINKHORN_COST = False
 USE_DYNAMIC_K_ESTIMATE = False
@@ -77,3 +77,5 @@ CYCLIC_STEP_SIZE_DOWN = 5
 CASCADE = False
 
 VISUALIZE_ATTENTION_WEIGHTS = False
+
+PREDICT_INTERSECTION_BOX = False
