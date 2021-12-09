@@ -139,7 +139,7 @@ def triplet_nms(hoi_list):
             y = hoi_list[idx_y]
             iou_human = IoU(x['h_box'], y['h_box'])
             iou_object = IoU(x['o_box'], y['o_box'])
-            if iou_human > 0.7 and iou_object > 0.7 and x['i_name'] == y['i_name'] and x['o_name'] == y['o_name']:
+            if iou_human > 0.5 and iou_object > 0.5 and x['i_name'] == y['i_name'] and x['o_name'] == y['o_name']:
                 mask[idx_y] = False
     new_hoi_list = []
     for idx in range(len(mask)):

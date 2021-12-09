@@ -17,7 +17,7 @@ import gc
 
 # This partially addresses the EOF Error
 import torch.multiprocessing
-torch.multiprocessing.set_sharing_strategy('file_system')
+torch.multiprocessing.set_sharing_strategy(sharing_strategy)
 
 # Load class_descriptions_boxable
 class_descriptions_boxable = pd.read_csv('data/2.5vrd/class-descriptions-boxable.csv', header=None)
@@ -502,8 +502,12 @@ class two_point_five_VRD(VisionDataset):
 
         depth_name = img_name[:-3] + 'png'
         depth_path = './data/2.5vrd/depth/' + self.image_folder_name + '/' + depth_name
-        depth = cv2.imread(depth_path, cv2.IMREAD_COLOR)
-        depth = Image.fromarray(depth[:, :, ::-1]).convert('RGB')
+        try:
+            depth = cv2.imread(depth_path, cv2.IMREAD_COLOR)
+            depth = Image.fromarray(depth[:, :, ::-1]).convert('RGB')
+        except:
+            if not USE_DEPTH_DURING_TRAINING and not USE_DEPTH_DURING_INFERENCE:
+                depth = img.copy()
 
         # Save img and depth to temp for visualization and debugging
         if SAVE_IMAGES:

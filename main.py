@@ -72,8 +72,8 @@ def get_args_parser():
                         help="Number of encoding layers in the transformer")
     parser.add_argument('--dec_layers', default=6, type=int,
                         help="Number of decoding layers in the transformer")
-    parser.add_argument('--dec_layers_distance', default=3, type=int)
-    parser.add_argument('--dec_layers_occlusion', default=3, type=int)
+    parser.add_argument('--dec_layers_distance', default=6, type=int)
+    parser.add_argument('--dec_layers_occlusion', default=6, type=int)
 
     parser.add_argument('--dim_feedforward', default=2048, type=int,
                         help="Intermediate size of the feedforward layers in the transformer blocks")
@@ -138,6 +138,7 @@ def get_args_parser():
                                  'small_cascade',
                                  'small_maskrcnn'])
     parser.add_argument('--manual_lr_change', type=float)
+    parser.add_argument('--manual_lr_backbone_change', type=float)
 
     # Experiment name
     parser.add_argument('--experiment_name', default='')
@@ -158,6 +159,7 @@ def main(args):
     if CASCADE:
         print("dec_layers | dec_layers_distance | dec_layers_distance: ")
         print(args.dec_layers, "         |", args.dec_layers_distance, "                  |", args.dec_layers_distance)
+    print("eos_coef:", args.eos_coef)
     print()
 
     # Create summary writer for tensorboard
@@ -185,7 +187,7 @@ def main(args):
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model,
                                                           device_ids=[args.gpu],
-                                                          find_unused_parameters=True)
+                                                          find_unused_parameters=False)
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
@@ -234,7 +236,6 @@ def main(args):
                                                         drop_last=True)
 
     # This partially addresses the EOF Error
-    sharing_strategy = "file_system"
     torch.multiprocessing.set_sharing_strategy(sharing_strategy)
 
     def set_worker_sharing_strategy(worker_id: int) -> None:
@@ -244,7 +245,8 @@ def main(args):
                                    batch_sampler=batch_sampler_train,
                                    collate_fn=utils.collate_fn,
                                    num_workers=args.num_workers,
-                                   worker_init_fn=set_worker_sharing_strategy)
+                                   worker_init_fn=set_worker_sharing_strategy,
+                                   persistent_workers=False)
 
     # (For debugging purpose) create a sequential sampler
     sequential_data_loader_train = DataLoader(dataset_train,
@@ -300,9 +302,11 @@ def main(args):
             lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
         if args.manual_lr_change:
-            for g in optimizer.param_groups:
-                g['lr'] = args.manual_lr_change
+            optimizer.param_groups[0]['lr'] = args.manual_lr_change
             print('Changed lr to', args.manual_lr_change)
+        if args.manual_lr_backbone_change:
+            optimizer.param_groups[1]['lr'] = args.manual_lr_backbone_change
+            print('Changed lr_backbone to', args.manual_lr_backbone_change)
 
 
     ############################################################################
@@ -335,21 +339,6 @@ def main(args):
                                       use_optimal_transport=USE_OPTIMAL_TRANSPORT,
                                       lr_scheduler = lr_scheduler)
         lr_scheduler.step()
-
-        # Save preliminary checkpoint
-        # before validating so that we have a checkpoint
-        # if the program encounters errors during validation
-        if args.output_dir:
-            checkpoint_name = 'preliminary_checkpoint_epoch_' + str(epoch) + '.pth'
-            checkpoint_paths = [output_dir / checkpoint_name]
-            for checkpoint_path in checkpoint_paths:
-                utils.save_on_master({
-                    'model': model_without_ddp.state_dict(),
-                    'optimizer': optimizer.state_dict(),
-                    'lr_scheduler': lr_scheduler.state_dict(),
-                    'epoch': epoch,
-                    'args': args,
-                }, checkpoint_path)
 
         # Validate
         with torch.no_grad():
