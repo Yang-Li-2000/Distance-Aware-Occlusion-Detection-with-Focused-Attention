@@ -21,6 +21,7 @@ import torchvision
 # if float(torchvision.__version__[:3]) < 0.7:
 #     from torchvision.ops import _new_empty_tensor
 #     from torchvision.ops.misc import _output_size
+import copy
 
 
 class SmoothedValue(object):
@@ -270,11 +271,11 @@ def collate_fn(batch):
     names = ['human_boxes', 'human_labels', 'object_boxes', 'object_labels', 'action_boxes', 'action_labels', 'occlusion_labels', 'image_id', 'org_size', 'num_bounding_boxes_in_ground_truth', 'intersection_boxes']
 
     for i in range(len(batch)):
-        target = dict(zip(names, batch[i][2:]))
+        target = dict(zip(names, copy.deepcopy(batch[i][2:])))
         target['image_id'] = target['image_id'].item()
         target['num_bounding_boxes_in_ground_truth'] = target['num_bounding_boxes_in_ground_truth'].item()
 
-        batch[i] = (batch[i][0], batch[i][1], target)
+        batch[i] = (copy.deepcopy(batch[i][0]), copy.deepcopy(batch[i][1]), target)
 
     batch = list(zip(*batch))
     # Transform samples and targets from tuples to nested tensors
