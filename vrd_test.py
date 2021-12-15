@@ -157,10 +157,10 @@ def main(args):
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
 
-        # Validation set
-        with torch.no_grad():
-            generate_evaluation_outputs(args, 'valid', model, criterion, data_loader_valid, optimizer,
-                     device, epoch, args.clip_max_norm)
+        # # Validation set
+        # with torch.no_grad():
+        #     generate_evaluation_outputs(args, 'valid', model, criterion, data_loader_valid, optimizer,
+        #              device, epoch, args.clip_max_norm)
 
         # Test set
         with torch.no_grad():
