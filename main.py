@@ -300,7 +300,14 @@ def main(args):
                 and 'lr_scheduler' in checkpoint \
                 and 'epoch' in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer'])
-            lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+            # Reset lr_scheduler if lr and backbone lr will be manually changed.
+            # For example, if I resume using checkpoint of epoch 29,
+            # manually change lr, and set lr_drop to 35,
+            # then epoch 30--64 will use the manually changed lr,
+            # and epoch 65 will use the lr dropped by lr_scheduler
+            # Note: these lines of code might lead to unexpected behavior of cyclic lr scheduler.
+            if not args.manual_lr_change and not args.manual_lr_backbone_change:
+                lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
             args.start_epoch = checkpoint['epoch'] + 1
         if args.manual_lr_change:
             optimizer.param_groups[0]['lr'] = args.manual_lr_change
