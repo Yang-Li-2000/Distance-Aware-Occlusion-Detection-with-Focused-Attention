@@ -77,8 +77,7 @@ def get_args_parser():
                         help="Relative classification weight of the no-object class")
 
     # Dataset parameters.
-    parser.add_argument('--dataset_file', choices=['hico', 'vcoco', 'hoia', 'two_point_five_vrd'], required=True)
-
+    parser.add_argument('--dataset_file', default='two_point_five_vrd', type=str)
     # Modify to your log path ******************************* !!!
     exp_time = datetime.datetime.now().strftime('%Y%m%d%H%M')
     work_dir = 'checkpoint/p_{}'.format(exp_time)
@@ -102,8 +101,9 @@ def main(args):
 
     print()
     print("USE_SMALL_VALID_ANNOTATION_FILE: ", USE_SMALL_VALID_ANNOTATION_FILE)
-    print("USE_DEPTH_DURING_INFERENCE: ", USE_DEPTH_DURING_INFERENCE)
-    print("CASCADE:", CASCADE)
+    print("USE_DEPTH_DURING_INFERENCE:      ", USE_DEPTH_DURING_INFERENCE)
+    print("PREDICT_INTERSECTION_BOX:        ", PREDICT_INTERSECTION_BOX)
+    print("CASCADE:                         ", CASCADE)
     if CASCADE:
         print("dec_layers | dec_layers_distance | dec_layers_distance: ")
         print(args.dec_layers, "         |", args.dec_layers_distance, "                  |", args.dec_layers_distance)
@@ -163,9 +163,16 @@ def main(args):
         #              device, epoch, args.clip_max_norm)
 
         # Test set
+        # Find out the name of the folder in which the predictions will be saved
+        start = args.resume.find('/')
+        end = args.resume.rfind('/')
+        folder_name = args.resume[start+1:end]
+        if len(folder_name) == 0:
+            folder_name = None
+
         with torch.no_grad():
             generate_evaluation_outputs(args, 'test', model, criterion, data_loader_test, optimizer,
-                     device, epoch, args.clip_max_norm)
+                     device, epoch, args.clip_max_norm, folder_name=folder_name)
 
         break
 

@@ -386,7 +386,7 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
 
 def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, max_norm: float = 0):
+                    device: torch.device, epoch: int, max_norm: float = 0, folder_name=None):
     """
     Generate predictions on the validation or test set. Results will be saved to
         a file named predictions_[valid_or_test]_[epoch_number].csv.
@@ -499,8 +499,16 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
 
     # Write DataFrame to file
     file_name = args.output_name
+    if folder_name:
+        file_name = folder_name + '/' + file_name
     file_name = file_name + '_' + valid_or_test + '_' + str(epoch-1) + '.csv'
     print(file_name)
-    df.to_csv(file_name, index=False)
+    try:
+        df.to_csv(file_name, index=False)
+    except:
+        print("Creating directory:", folder_name)
+        command = 'mkdir' + ' ' + folder_name
+        os.system(command)
+        df.to_csv(file_name, index=False)
 
 
