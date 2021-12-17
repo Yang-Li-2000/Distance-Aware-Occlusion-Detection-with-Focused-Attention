@@ -464,6 +464,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
         # Print a progress bar
         progressBar(iteratoin_count + 1, max_num_iterations, valid_or_test + ' progress    ')
         iteratoin_count += 1
+        break
 
     # Save Evaluation Outputs to a DataFrame
     df = pd.DataFrame({'image_id_1': image_id_1_list,
@@ -501,14 +502,12 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
     file_name = args.output_name
     if folder_name:
         file_name = folder_name + '/' + file_name
+        if not os.path.exists(folder_name):
+            os.mkdir(folder_name)
+
     file_name = file_name + '_' + valid_or_test + '_' + str(epoch-1) + '.csv'
     print(file_name)
-    try:
-        df.to_csv(file_name, index=False)
-    except:
-        print("Creating directory:", folder_name)
-        command = 'mkdir' + ' ' + folder_name
-        os.system(command)
-        df.to_csv(file_name, index=False)
+    df.to_csv(file_name, index=False)
+
 
 
