@@ -464,7 +464,6 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
         # Print a progress bar
         progressBar(iteratoin_count + 1, max_num_iterations, valid_or_test + ' progress    ')
         iteratoin_count += 1
-        break
 
     # Save Evaluation Outputs to a DataFrame
     df = pd.DataFrame({'image_id_1': image_id_1_list,
