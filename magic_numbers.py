@@ -42,7 +42,7 @@ hoi_th_debug = 0
 occlusion_th_debug = 0
 
 # num_workers and batch size for the validation and test sets
-num_workers_validation = 2 # 16
+num_workers_validation = 8 # 16
 batch_size_validation = 10  # 30
 
 
@@ -74,7 +74,7 @@ CYCLIC_STEP_SIZE_UP = 5
 CYCLIC_STEP_SIZE_DOWN = 5
 
 
-CASCADE = False
+CASCADE = True
 
 VISUALIZE_ATTENTION_WEIGHTS = False
 

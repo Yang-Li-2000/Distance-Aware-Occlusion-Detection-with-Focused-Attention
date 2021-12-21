@@ -158,8 +158,8 @@ def main(args):
     print("PREDICT_INTERSECTION_BOX:    ", PREDICT_INTERSECTION_BOX)
     print("CASCADE:                     ", CASCADE)
     if CASCADE:
-        print("dec_layers | dec_layers_distance | dec_layers_distance: ")
-        print(args.dec_layers, "         |", args.dec_layers_distance, "                  |", args.dec_layers_distance)
+        print("dec_layers | dec_layers_distance | dec_layers_occlusion: ")
+        print(args.dec_layers, "         |", args.dec_layers_distance, "                  |", args.dec_layers_occlusion)
     print("eos_coef:", args.eos_coef)
     print()
 
@@ -247,7 +247,7 @@ def main(args):
                                    collate_fn=utils.collate_fn,
                                    num_workers=args.num_workers,
                                    worker_init_fn=set_worker_sharing_strategy,
-                                   persistent_workers=False)
+                                   persistent_workers=True)
 
     # (For debugging purpose) create a sequential sampler
     sequential_data_loader_train = DataLoader(dataset_train,
