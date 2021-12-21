@@ -221,17 +221,17 @@ def main(args):
     # Build datasets
     dataset_train = build_dataset(image_set='train', args=args)
     dataset_valid = build_dataset(image_set='valid', args=args, test_scale=800)
-    dataset_test = build_dataset(image_set='test', args=args, test_scale=800)
+    #dataset_test = build_dataset(image_set='test', args=args, test_scale=800)
 
     # Build sampler and batch sampler
     if args.distributed:
         sampler_train = DistributedSampler(dataset_train)
         sampler_valid = DistributedSampler(dataset_valid)
-        sampler_test = DistributedSampler(dataset_test)
+        #sampler_test = DistributedSampler(dataset_test)
     else:
         sampler_train = torch.utils.data.RandomSampler(dataset_train)
         sampler_valid = torch.utils.data.RandomSampler(dataset_valid)
-        sampler_test = torch.utils.data.RandomSampler(dataset_test)
+        #sampler_test = torch.utils.data.RandomSampler(dataset_test)
     batch_sampler_train = torch.utils.data.BatchSampler(sampler_train,
                                                         args.batch_size,
                                                         drop_last=True)
@@ -266,14 +266,14 @@ def main(args):
                                    collate_fn=utils.collate_fn,
                                    num_workers=num_workers_validation,
                                    worker_init_fn=set_worker_sharing_strategy)
-    batch_sampler_test = torch.utils.data.BatchSampler(sampler_test,
-                                                       batch_size_validation,
-                                                       drop_last=False)
-    data_loader_test = DataLoader(dataset_test,
-                                   batch_sampler=batch_sampler_test,
-                                   collate_fn=utils.collate_fn,
-                                   num_workers=num_workers_validation,
-                                   worker_init_fn=set_worker_sharing_strategy)
+    # batch_sampler_test = torch.utils.data.BatchSampler(sampler_test,
+    #                                                    batch_size_validation,
+    #                                                    drop_last=False)
+    # data_loader_test = DataLoader(dataset_test,
+    #                                batch_sampler=batch_sampler_test,
+    #                                collate_fn=utils.collate_fn,
+    #                                num_workers=num_workers_validation,
+    #                                worker_init_fn=set_worker_sharing_strategy)
 
     # Load from pretrained DETR model.
     if args.num_queries == 100 and args.enc_layers == 6 and args.dec_layers == 6:
