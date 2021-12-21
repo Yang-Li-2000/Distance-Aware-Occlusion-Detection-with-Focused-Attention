@@ -242,12 +242,15 @@ def main(args):
     def set_worker_sharing_strategy(worker_id: int) -> None:
         torch.multiprocessing.set_sharing_strategy(sharing_strategy)
 
+    if args.num_workers == 0:
+        PERSISTENT_WORKERS = False
+
     data_loader_train = DataLoader(dataset_train,
                                    batch_sampler=batch_sampler_train,
                                    collate_fn=utils.collate_fn,
                                    num_workers=args.num_workers,
                                    worker_init_fn=set_worker_sharing_strategy,
-                                   persistent_workers=True)
+                                   persistent_workers=PERSISTENT_WORKERS)
 
     # (For debugging purpose) create a sequential sampler
     sequential_data_loader_train = DataLoader(dataset_train,
