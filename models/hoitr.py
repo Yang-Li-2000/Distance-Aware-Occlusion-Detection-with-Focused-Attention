@@ -318,6 +318,8 @@ class SetCriterion(nn.Module):
             [t["action_labels"][J] for t, (_, J) in zip(targets, indices)])
         occlusion_target_classes_o = torch.cat(
             [t["occlusion_labels"][J] for t, (_, J) in zip(targets, indices)])
+        raw_distance_target_classes_o = torch.cat([t["raw_distance_labels"][J] for t, (_, J) in zip(targets, indices)])
+        raw_occlusion_target_classes_o = torch.cat([t["raw_occlusion_labels"][J] for t, (_, J) in zip(targets, indices)])
 
         human_target_classes = torch.full(human_src_logits.shape[:2],
                                           num_humans,
@@ -336,25 +338,44 @@ class SetCriterion(nn.Module):
                                            dtype=torch.int64,
                                            device=action_src_logits.device)
         action_target_classes[idx] = action_target_classes_o
+        raw_distance_target_classes = torch.full(action_src_logits.shape, 1, device=object_src_logits.device) * torch.tensor([0,0,0,0,1], device=object_src_logits.device, dtype=torch.float16)
+        raw_distance_target_classes[idx] = raw_distance_target_classes_o
 
         occlusion_target_classes = torch.full(occlusion_src_logits.shape[:2],
                                               self.num_actions,
                                               dtype=torch.int64,
                                               device=occlusion_src_logits.device)
         occlusion_target_classes[idx] = occlusion_target_classes_o
+        raw_occlusion_target_classes = torch.full(occlusion_src_logits.shape, 1, device=object_src_logits.device) * torch.tensor([0,0,0,0,1], device=object_src_logits.device, dtype=torch.float16)
+        raw_occlusion_target_classes[idx] = raw_occlusion_target_classes_o
 
-        human_loss_ce = F.cross_entropy(human_src_logits.transpose(1, 2),
-                                        human_target_classes,
-                                        self.human_empty_weight)
-        object_loss_ce = F.cross_entropy(object_src_logits.transpose(1, 2),
-                                         object_target_classes,
-                                         self.object_empty_weight)
-        action_loss_ce = F.cross_entropy(action_src_logits.transpose(1, 2),
-                                         action_target_classes,
-                                         self.action_empty_weight)
-        occlusion_loss_ce = F.cross_entropy(
-            occlusion_src_logits.transpose(1, 2),
-            occlusion_target_classes, self.occlusion_empty_weight)
+        # Loss for Object A
+        human_loss_ce = F.cross_entropy(human_src_logits.transpose(1, 2), human_target_classes, self.human_empty_weight)
+
+        # Loss for Object B
+        object_loss_ce = F.cross_entropy(object_src_logits.transpose(1, 2), object_target_classes, self.object_empty_weight)
+
+        # Loss for Distance. Use either soft or hard labels.
+        if USE_RAW_DISTANCE_LABELS and self.training:
+            action_loss_ce = F.cross_entropy(action_src_logits.permute(0, 2, 1),raw_distance_target_classes.permute(0, 2, 1), self.action_empty_weight, reduction='none').sum()
+            # When all soft (raw) labels are the same for each image,
+            # the loss computed using soft labels divided by rescaling_factor
+            # equals to the loss computed using hard labels
+            rescaling_factor = (raw_distance_target_classes * self.action_empty_weight).sum()
+            action_loss_ce = action_loss_ce / rescaling_factor
+        else:
+            action_loss_ce = F.cross_entropy(action_src_logits.transpose(1, 2), action_target_classes, self.action_empty_weight)
+
+        # Loss for Occlusion. Use either soft or hard labels.
+        if USE_RAW_OCCLUSION_LABELS and self.training:
+            occlusion_loss_ce = F.cross_entropy(occlusion_src_logits.permute(0, 2, 1), raw_occlusion_target_classes.permute(0, 2, 1), self.occlusion_empty_weight, reduction='none').sum()
+            # When all soft (raw) labels are the same for each image,
+            # the loss computed using soft labels divided by rescaling_factor
+            # equals to the loss computed using hard labels
+            rescaling_factor = (raw_occlusion_target_classes * self.occlusion_empty_weight).sum()
+            occlusion_loss_ce = occlusion_loss_ce / rescaling_factor
+        else:
+            occlusion_loss_ce = F.cross_entropy(occlusion_src_logits.transpose(1, 2), occlusion_target_classes, self.occlusion_empty_weight)
 
         loss_ce = human_loss_ce + object_loss_ce + 2 * action_loss_ce + 2 * occlusion_loss_ce
         losses = {
@@ -366,11 +387,8 @@ class SetCriterion(nn.Module):
         }
 
         if log:
-            losses['class_error_action'] = 100 - \
-                                           accuracy(action_src_logits[idx],
-                                                    action_target_classes_o)[0]
-            losses['class_error_occlusion'] = 100 - accuracy(
-                occlusion_src_logits[idx], occlusion_target_classes_o)[0]
+            losses['class_error_action'] = 100 - accuracy(action_src_logits[idx], action_target_classes_o)[0]
+            losses['class_error_occlusion'] = 100 - accuracy(occlusion_src_logits[idx], occlusion_target_classes_o)[0]
         return losses
 
     @torch.no_grad()

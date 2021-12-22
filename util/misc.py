@@ -268,7 +268,7 @@ def get_sha():
 
 def collate_fn(batch):
 
-    names = ['human_boxes', 'human_labels', 'object_boxes', 'object_labels', 'action_boxes', 'action_labels', 'occlusion_labels', 'image_id', 'org_size', 'num_bounding_boxes_in_ground_truth', 'intersection_boxes']
+    names = ['human_boxes', 'human_labels', 'object_boxes', 'object_labels', 'action_boxes', 'action_labels', 'occlusion_labels', 'raw_distance_labels', 'raw_occlusion_labels', 'image_id', 'org_size', 'num_bounding_boxes_in_ground_truth', 'intersection_boxes']
 
     for i in range(len(batch)):
         target = dict(zip(names, copy.deepcopy(batch[i][2:])))

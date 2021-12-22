@@ -171,7 +171,7 @@ def xyxy_to_cxcywh(box):
 
 def get_hoi_annotation_from_odgt(item, total_boxes, scale):
     human_boxes, object_boxes, action_boxes = [], [], []
-    human_labels, object_labels, action_labels, occlusion_labels = [], [], [], []
+    human_labels, object_labels, action_labels, occlusion_labels, raw_distance_labels, raw_occlusion_labels = [], [], [], [], [], []
     img_hh, img_ww = item['height'], item['width']
     for hoi in item.get('hoi', []):
         x1, y1, x2, y2, cls_id = list(map(int, total_boxes[int(hoi['subject_id'])]))
@@ -193,6 +193,29 @@ def get_hoi_annotation_from_odgt(item, total_boxes, scale):
         object_labels.append(object_box[4])
         action_labels.append(hoi_box[4])
         occlusion_labels.append(hoi_box[5])
+        unprocessed_raw_distance_labels = np.array([int(x) for x in hoi['raw_distance'].split(',')])
+        unprocessed_raw_occlusion_labels = np.array([int(x) for x in hoi['raw_occlusion'].split(',')])
+
+        # Convert raw distance to probability
+        values, counts = np.unique(unprocessed_raw_distance_labels, return_counts=True)
+        frequencies = counts / counts.sum()
+        expanded_frequency = np.zeros(5, dtype=np.float16)
+        for j in range(len(values)):
+            current_value = values[j]
+            current_frequency = frequencies[j]
+            expanded_frequency[current_value] = current_frequency
+        raw_distance_labels.append(expanded_frequency)
+
+        # Convert raw occlusion to probability
+        values, counts = np.unique(unprocessed_raw_occlusion_labels, return_counts=True)
+        frequencies = counts / counts.sum()
+        expanded_frequency = np.zeros(5, dtype=np.float16)
+        for j in range(len(values)):
+            current_value = values[j]
+            current_frequency = frequencies[j]
+            expanded_frequency[current_value] = current_frequency
+        raw_occlusion_labels.append(expanded_frequency)
+
     return dict(
         human_boxes=torch.from_numpy(np.array(human_boxes).astype(np.float32)),
         human_labels=torch.from_numpy(np.array(human_labels)),
@@ -203,6 +226,8 @@ def get_hoi_annotation_from_odgt(item, total_boxes, scale):
         occlusion_labels=torch.from_numpy(np.array(occlusion_labels)),
         image_id=item['file_name'],
         org_size=torch.as_tensor([int(img_hh), int(img_ww)]),
+        raw_distance_labels=torch.from_numpy(np.array(raw_distance_labels)),
+        raw_occlusion_labels=torch.from_numpy(np.array(raw_occlusion_labels))
     )
 
 
@@ -536,6 +561,8 @@ class two_point_five_VRD(VisionDataset):
         action_boxes = target['action_boxes']
         action_labels = target['action_labels']
         occlusion_labels = target['occlusion_labels']
+        raw_distance_labels = target['raw_distance_labels']
+        raw_occlusion_labels = target['raw_occlusion_labels']
         image_id = target['image_id']
         org_size = target['org_size']
         num_bounding_boxes_in_ground_truth = target['num_bounding_boxes_in_ground_truth']
@@ -562,7 +589,7 @@ class two_point_five_VRD(VisionDataset):
         del target
         gc.collect()
 
-        return img, depth, human_boxes, human_labels, object_boxes, object_labels, action_boxes, action_labels, occlusion_labels, image_id, org_size, num_bounding_boxes_in_ground_truth, intersection_boxes
+        return img, depth, human_boxes, human_labels, object_boxes, object_labels, action_boxes, action_labels, occlusion_labels, raw_distance_labels, raw_occlusion_labels, image_id, org_size, num_bounding_boxes_in_ground_truth, intersection_boxes
 
     def __len__(self):
         return len(self.annotations)

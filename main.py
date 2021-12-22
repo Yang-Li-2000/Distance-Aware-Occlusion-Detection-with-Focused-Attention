@@ -156,6 +156,8 @@ def main(args):
     print("USE_OPTIMAL_TRANSPORT:       ", USE_OPTIMAL_TRANSPORT)
     print("USE_DEPTH_DURING_TRAINING:   ", USE_DEPTH_DURING_TRAINING)
     print("PREDICT_INTERSECTION_BOX:    ", PREDICT_INTERSECTION_BOX)
+    print("USE_RAW_DISTANCE_LABELS:     ", USE_RAW_DISTANCE_LABELS)
+    print("USE_RAW_OCCLUSION_LABELS:    ", USE_RAW_OCCLUSION_LABELS)
     print("CASCADE:                     ", CASCADE)
     if CASCADE:
         print("dec_layers | dec_layers_distance | dec_layers_occlusion: ")
@@ -242,15 +244,12 @@ def main(args):
     def set_worker_sharing_strategy(worker_id: int) -> None:
         torch.multiprocessing.set_sharing_strategy(sharing_strategy)
 
-    if args.num_workers == 0:
-        PERSISTENT_WORKERS = False
-
     data_loader_train = DataLoader(dataset_train,
                                    batch_sampler=batch_sampler_train,
                                    collate_fn=utils.collate_fn,
                                    num_workers=args.num_workers,
                                    worker_init_fn=set_worker_sharing_strategy,
-                                   persistent_workers=PERSISTENT_WORKERS)
+                                   persistent_workers=(PERSISTENT_WORKERS and (args.num_workers > 0)))
 
     # (For debugging purpose) create a sequential sampler
     sequential_data_loader_train = DataLoader(dataset_train,
@@ -266,14 +265,6 @@ def main(args):
                                    collate_fn=utils.collate_fn,
                                    num_workers=num_workers_validation,
                                    worker_init_fn=set_worker_sharing_strategy)
-    # batch_sampler_test = torch.utils.data.BatchSampler(sampler_test,
-    #                                                    batch_size_validation,
-    #                                                    drop_last=False)
-    # data_loader_test = DataLoader(dataset_test,
-    #                                batch_sampler=batch_sampler_test,
-    #                                collate_fn=utils.collate_fn,
-    #                                num_workers=num_workers_validation,
-    #                                worker_init_fn=set_worker_sharing_strategy)
 
     # Load from pretrained DETR model.
     if args.num_queries == 100 and args.enc_layers == 6 and args.dec_layers == 6:
