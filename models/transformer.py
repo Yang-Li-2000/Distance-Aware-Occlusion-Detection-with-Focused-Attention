@@ -36,7 +36,7 @@ class Transformer(nn.Module):
                                                 dropout, activation, normalize_before)
         decoder_norm = nn.LayerNorm(d_model)
         self.decoder = TransformerDecoder(decoder_layer, num_decoder_layers, decoder_norm,
-                                          return_intermediate=return_intermediate_dec)
+                                          return_intermediate=return_intermediate_dec, d_model=d_model, pair_detector=True)
         if CASCADE:
             # Decoder for distance
             distance_decoder_layer = TransformerDecoderLayer(d_model, nhead, dim_feedforward,
@@ -71,18 +71,19 @@ class Transformer(nn.Module):
 
         tgt = torch.zeros_like(query_embed)
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
-        hs = self.decoder(tgt, memory, memory_key_padding_mask=mask,
+        hs, human_outputs_coord, object_outputs_coord = \
+            self.decoder(tgt, memory, memory_key_padding_mask=mask,
                           pos=pos_embed, query_pos=query_embed, writer=writer,
                           shape=(bs, c, h, w))
         if not CASCADE:
-            return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
+            return hs.transpose(1, 2), human_outputs_coord, object_outputs_coord, memory.permute(1, 2, 0).view(bs, c, h, w)
         else:
             hs = hs.transpose(1, 2)
             # Distance
             distance_query_embed = hs[-1]
             distance_query_embed = distance_query_embed.permute(1, 0, 2)
             distance_tgt = torch.zeros_like(distance_query_embed)
-            distance_decoder_out = self.distance_decoder(distance_tgt, memory, memory_key_padding_mask=mask,
+            distance_decoder_out, _, _ = self.distance_decoder(distance_tgt, memory, memory_key_padding_mask=mask,
                                                          pos=pos_embed, query_pos=distance_query_embed)
             distance_decoder_out = distance_decoder_out.transpose(1, 2)
 
@@ -90,11 +91,11 @@ class Transformer(nn.Module):
             occlusion_query_embed = hs[-1]
             occlusion_query_embed = occlusion_query_embed.permute(1, 0, 2)
             occlusion_tgt = torch.zeros_like(occlusion_query_embed)
-            occlusion_decoder_out = self.occlusion_decoder(occlusion_tgt, memory, memory_key_padding_mask=mask,
+            occlusion_decoder_out, _, _ = self.occlusion_decoder(occlusion_tgt, memory, memory_key_padding_mask=mask,
                                                            pos=pos_embed, query_pos=occlusion_query_embed)
             occlusion_decoder_out = occlusion_decoder_out.transpose(1, 2)
 
-            return hs, distance_decoder_out, occlusion_decoder_out, memory.permute(1, 2, 0).view(bs, c, h, w)
+            return hs, distance_decoder_out, occlusion_decoder_out, human_outputs_coord, object_outputs_coord, memory.permute(1, 2, 0).view(bs, c, h, w)
 
 
 class TransformerEncoder(nn.Module):
@@ -121,14 +122,34 @@ class TransformerEncoder(nn.Module):
         return output
 
 
+class temp_MLP(nn.Module):
+    """ Very simple multi-layer perceptron (also called FFN)"""
+
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
+        super().__init__()
+        self.num_layers = num_layers
+        h = [hidden_dim] * (num_layers - 1)
+        self.layers = nn.ModuleList(
+            nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+
+    def forward(self, x):
+        for i, layer in enumerate(self.layers):
+            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+        return x
+
 class TransformerDecoder(nn.Module):
 
-    def __init__(self, decoder_layer, num_layers, norm=None, return_intermediate=False):
+    def __init__(self, decoder_layer, num_layers, norm=None, return_intermediate=False, pair_detector=False, d_model=None):
         super().__init__()
         self.layers = _get_clones(decoder_layer, num_layers)
         self.num_layers = num_layers
         self.norm = norm
         self.return_intermediate = return_intermediate
+        self.pair_detector = pair_detector
+        if pair_detector:
+            self.human_box_embed = temp_MLP(d_model, d_model, 4, 3)
+            self.object_box_embed = temp_MLP(d_model, d_model, 4, 3)
+            self.query_pos_proj = torch.nn.Linear(8, d_model)
 
     def forward(self, tgt, memory,
                 tgt_mask: Optional[Tensor] = None,
@@ -142,6 +163,8 @@ class TransformerDecoder(nn.Module):
         output = tgt
 
         intermediate = []
+        human_outputs_coord_list = []
+        object_outputs_coord_list = []
 
         layer_index = 0
         for layer in self.layers:
@@ -153,6 +176,19 @@ class TransformerDecoder(nn.Module):
                            writer=writer,
                            shape=shape,
                            layer_index=layer_index)
+
+            if self.pair_detector:
+                human_outputs_coord = self.human_box_embed(
+                    self.norm(output)).sigmoid()
+                object_outputs_coord = self.object_box_embed(
+                    self.norm(output)).sigmoid()
+                query_pos = torch.cat(
+                    [human_outputs_coord, object_outputs_coord], dim=2)
+                query_pos = self.query_pos_proj(query_pos)
+                human_outputs_coord_list.append(human_outputs_coord)
+                object_outputs_coord_list.append(object_outputs_coord)
+
+
             layer_index += 1
             if self.return_intermediate:
                 intermediate.append(self.norm(output))
@@ -165,9 +201,13 @@ class TransformerDecoder(nn.Module):
                 intermediate.append(output)
 
         if self.return_intermediate:
-            return torch.stack(intermediate)
+            if self.pair_detector:
+                return torch.stack(
+                    intermediate), torch.stack(human_outputs_coord_list), torch.stack(object_outputs_coord_list)
+            else:
+                return torch.stack(intermediate), None, None
 
-        return output.unsqueeze(0)
+        return output.unsqueeze(0), None, None
 
 
 class TransformerEncoderLayer(nn.Module):

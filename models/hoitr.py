@@ -110,18 +110,20 @@ class HoiTR(nn.Module):
             writer.add_image("image", samples.tensors[0] * std + mean)
 
         if CASCADE:
-            hs, distance_decoder_out, occlusion_decoder_out = \
+            hs, distance_decoder_out, occlusion_decoder_out, human_outputs_coord, object_outputs_coord = \
                 self.transformer(self.input_proj(src), mask, self.query_embed.weight,
-                                 pos[-1])[:3]
+                                 pos[-1])[:5]
         else:
-            hs = \
+            hs, human_outputs_coord, object_outputs_coord = \
                 self.transformer(self.input_proj(src), mask, self.query_embed.weight,
-                                 pos[-1], writer=writer)[0]
+                                 pos[-1], writer=writer)[:3]
+
+        human_outputs_coord = human_outputs_coord.permute(0, 2, 1, 3)
+        object_outputs_coord = object_outputs_coord.permute(0, 2, 1, 3)
 
         human_outputs_class = self.human_cls_embed(hs)
-        human_outputs_coord = self.human_box_embed(hs).sigmoid()
         object_outputs_class = self.object_cls_embed(hs)
-        object_outputs_coord = self.object_box_embed(hs).sigmoid()
+        #object_outputs_coord = self.object_box_embed(hs).sigmoid()
 
 
         if CASCADE:
