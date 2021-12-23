@@ -94,25 +94,19 @@ def get_args_parser():
 
     parser.add_argument('--output_name', default='predictions', type=str)
 
-    # Distributed training parameters.
-    parser.add_argument('--world_size', default=1, type=int,
-                        help='number of distributed processes')
-    parser.add_argument('--dist_url', default='env://',
-                        help='url used to set up distributed training')
-
     return parser
 
 
 def main(args):
-    utils.init_distributed_mode(args)
+
     print()
     print("USE_SMALL_VALID_ANNOTATION_FILE: ", USE_SMALL_VALID_ANNOTATION_FILE)
     print("USE_DEPTH_DURING_INFERENCE:      ", USE_DEPTH_DURING_INFERENCE)
     print("PREDICT_INTERSECTION_BOX:        ", PREDICT_INTERSECTION_BOX)
     print("CASCADE:                         ", CASCADE)
     if CASCADE:
-        print("dec_layers | dec_layers_distance | dec_layers_occlusion: ")
-        print(args.dec_layers, "         |", args.dec_layers_distance, "                  |", args.dec_layers_occlusion)
+        print("dec_layers | dec_layers_distance | dec_layers_distance: ")
+        print(args.dec_layers, "         |", args.dec_layers_distance, "                  |", args.dec_layers_distance)
     print()
 
     device = torch.device(args.device)
@@ -120,31 +114,31 @@ def main(args):
     model, criterion = build_model(args)
     model.to(device)
 
-    # Distributed set up
     model_without_ddp = model
 
-    if args.distributed:
-        model = torch.nn.parallel.DistributedDataParallel(model,
-                                                          device_ids=[args.gpu],
-                                                          find_unused_parameters=False)
-        model_without_ddp = model.module
-    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
-    print('number of params:', n_parameters)
     param_dicts = [
-        {"params": [p for n, p in model_without_ddp.named_parameters()
-                    if "backbone" not in n and p.requires_grad]},
+        {"params": [p for n, p in model_without_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
         {
-            "params": [p for n, p in model_without_ddp.named_parameters()
-                       if "backbone" in n and p.requires_grad],
+            "params": [p for n, p in model_without_ddp.named_parameters() if "backbone" in n and p.requires_grad],
             "lr": args.lr_backbone,
         },
     ]
-
     optimizer = torch.optim.AdamW(param_dicts, lr=args.lr, weight_decay=args.weight_decay)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
+    dataset_valid = build_dataset(image_set='valid', args=args, test_scale=800)
     dataset_test = build_dataset(image_set='test', args=args, test_scale=800)
+
+    sampler_valid = torch.utils.data.RandomSampler(dataset_valid)
     sampler_test = torch.utils.data.RandomSampler(dataset_test)
+
+    # Construct validation data loader
+    batch_sampler_valid = torch.utils.data.BatchSampler(sampler_valid, args.batch_size, drop_last=False)
+    data_loader_valid = DataLoader(dataset_valid,
+                                   batch_sampler=batch_sampler_valid,
+                                   collate_fn=utils.collate_fn,
+                                   num_workers=args.num_workers)
+
     batch_sampler_test = torch.utils.data.BatchSampler(sampler_test, args.batch_size, drop_last=False)
     data_loader_test = DataLoader(dataset_test,
                                    batch_sampler=batch_sampler_test,
@@ -162,6 +156,11 @@ def main(args):
     print("Start Testing")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
+
+        # # Validation set
+        # with torch.no_grad():
+        #     generate_evaluation_outputs(args, 'valid', model, criterion, data_loader_valid, optimizer,
+        #              device, epoch, args.clip_max_norm)
 
         # Test set
         # Find out the name of the folder in which the predictions will be saved
