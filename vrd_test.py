@@ -105,8 +105,8 @@ def main(args):
     print("PREDICT_INTERSECTION_BOX:        ", PREDICT_INTERSECTION_BOX)
     print("CASCADE:                         ", CASCADE)
     if CASCADE:
-        print("dec_layers | dec_layers_distance | dec_layers_distance: ")
-        print(args.dec_layers, "         |", args.dec_layers_distance, "                  |", args.dec_layers_distance)
+        print("dec_layers | dec_layers_distance | dec_layers_occlusion: ")
+        print(args.dec_layers, "         |", args.dec_layers_distance, "                  |", args.dec_layers_occlusion)
     print()
 
     device = torch.device(args.device)
