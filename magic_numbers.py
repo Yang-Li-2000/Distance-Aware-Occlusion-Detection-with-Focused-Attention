@@ -12,7 +12,7 @@ small_annotation_file = 'small_train_combined.odgt'
 USE_SMALL_VALID_ANNOTATION_FILE = False
 small_valid_annotation_file = 'small_valid_combined.odgt'
 #small_valid_annotation_file = 'small_valid_combined_custom.odgt'
-USE_SMALL_TEST_ANNOTATION_FILE = True
+USE_SMALL_TEST_ANNOTATION_FILE = False
 small_test_annotation_file = 'small_test_combined.odgt'
 
 # Disable shuffle or not. Useful for debugging.
