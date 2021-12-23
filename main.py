@@ -187,10 +187,12 @@ def main(args):
 
     # Distributed set up
     model_without_ddp = model
+
+    find_unused_parameters = args.backbone == 'swin'
     if args.distributed:
         model = torch.nn.parallel.DistributedDataParallel(model,
                                                           device_ids=[args.gpu],
-                                                          find_unused_parameters=False)
+                                                          find_unused_parameters=find_unused_parameters)
         model_without_ddp = model.module
     n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print('number of params:', n_parameters)
