@@ -1,4 +1,8 @@
 .idea
-*.odgt
 *.csv
 *.pth
+data/detr_coco
+data/hico
+data/hoia
+data/vcoco
+venv
