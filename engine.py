@@ -28,6 +28,7 @@ from torch import nn
 from util.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, get_world_size, interpolate,
                        is_dist_avail_and_initialized)
+import time
 
 
 def progressBar(i, max, text):
@@ -416,6 +417,8 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
     distance_list = list()
     occlusion_list = list()
 
+    start_time = time.time()
+
     for samples, depth, targets in data_loader:
 
         original_targets = targets
@@ -465,9 +468,28 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
         iteratoin_count += 1
 
         # Print a progress bar
-        if is_main_process():
+        progressBar_freq = int(10 / args.batch_size)
+        if progressBar_freq < 1:
+            progressBar_freq = 1
+        if is_main_process() and (iteratoin_count % progressBar_freq == 0 or iteratoin_count == 1):
+            current_time = time.time() - start_time
+            current_h = int(current_time / 3600)
+            current_m = int((current_time % 3600) / 60)
+            current_s = int(current_time % 60)
+            speed = iteratoin_count / (current_time)
+            estimated_total_time = max_num_iterations / speed
+            estimated_h = int(estimated_total_time / 3600)
+            estimated_m = int((estimated_total_time % 3600) / 60)
+            estimated_s = int(estimated_total_time % 60)
             progressBar(iteratoin_count, max_num_iterations,
-                        valid_or_test + ' progress    ' + str(iteratoin_count+1) + '/' + str(max_num_iterations))
+                        valid_or_test + ' progress    '
+                        + str(iteratoin_count)
+                        + '/'
+                        + str(max_num_iterations)
+                        + '    '
+                        + str(current_h) + 'h-' + str(current_m).zfill(2) + 'm-' + str(current_s).zfill(2) + 's'
+                        + '/'
+                        + str(estimated_h) + 'h-' + str(estimated_m).zfill(2) + 'm-' + str(estimated_s).zfill(2) + 's    ')
 
     # Save Evaluation Outputs to a DataFrame
     df = pd.DataFrame({'image_id_1': image_id_1_list,
