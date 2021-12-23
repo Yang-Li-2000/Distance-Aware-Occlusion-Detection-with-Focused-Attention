@@ -94,11 +94,17 @@ def get_args_parser():
 
     parser.add_argument('--output_name', default='predictions', type=str)
 
+    # Distributed training parameters.
+    parser.add_argument('--world_size', default=1, type=int,
+                        help='number of distributed processes')
+    parser.add_argument('--dist_url', default='env://',
+                        help='url used to set up distributed training')
+
     return parser
 
 
 def main(args):
-
+    utils.init_distributed_mode(args)
     print()
     print("USE_SMALL_VALID_ANNOTATION_FILE: ", USE_SMALL_VALID_ANNOTATION_FILE)
     print("USE_DEPTH_DURING_INFERENCE:      ", USE_DEPTH_DURING_INFERENCE)
@@ -114,15 +120,26 @@ def main(args):
     model, criterion = build_model(args)
     model.to(device)
 
+    # Distributed set up
     model_without_ddp = model
 
+    if args.distributed:
+        model = torch.nn.parallel.DistributedDataParallel(model,
+                                                          device_ids=[args.gpu],
+                                                          find_unused_parameters=False)
+        model_without_ddp = model.module
+    n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print('number of params:', n_parameters)
     param_dicts = [
-        {"params": [p for n, p in model_without_ddp.named_parameters() if "backbone" not in n and p.requires_grad]},
+        {"params": [p for n, p in model_without_ddp.named_parameters()
+                    if "backbone" not in n and p.requires_grad]},
         {
-            "params": [p for n, p in model_without_ddp.named_parameters() if "backbone" in n and p.requires_grad],
+            "params": [p for n, p in model_without_ddp.named_parameters()
+                       if "backbone" in n and p.requires_grad],
             "lr": args.lr_backbone,
         },
     ]
+
     optimizer = torch.optim.AdamW(param_dicts, lr=args.lr, weight_decay=args.weight_decay)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
