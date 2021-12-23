@@ -607,6 +607,8 @@ def build(image_set, test_scale=-1):
             annotation_file = './data/2.5vrd/' + small_valid_annotation_file
     elif image_set == 'test':
         annotation_file = './data/2.5vrd/annotation_test_combined.odgt'
+        if USE_SMALL_TEST_ANNOTATION_FILE:
+            annotation_file = './data/2.5vrd/' + small_test_annotation_file
     else:
         raise Exception()
     dataset = two_point_five_VRD(root='./data/2.5vrd',
