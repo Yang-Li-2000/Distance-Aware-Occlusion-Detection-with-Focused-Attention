@@ -126,19 +126,8 @@ def main(args):
     optimizer = torch.optim.AdamW(param_dicts, lr=args.lr, weight_decay=args.weight_decay)
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
 
-    dataset_valid = build_dataset(image_set='valid', args=args, test_scale=800)
     dataset_test = build_dataset(image_set='test', args=args, test_scale=800)
-
-    sampler_valid = torch.utils.data.RandomSampler(dataset_valid)
     sampler_test = torch.utils.data.RandomSampler(dataset_test)
-
-    # Construct validation data loader
-    batch_sampler_valid = torch.utils.data.BatchSampler(sampler_valid, args.batch_size, drop_last=False)
-    data_loader_valid = DataLoader(dataset_valid,
-                                   batch_sampler=batch_sampler_valid,
-                                   collate_fn=utils.collate_fn,
-                                   num_workers=args.num_workers)
-
     batch_sampler_test = torch.utils.data.BatchSampler(sampler_test, args.batch_size, drop_last=False)
     data_loader_test = DataLoader(dataset_test,
                                    batch_sampler=batch_sampler_test,
@@ -156,11 +145,6 @@ def main(args):
     print("Start Testing")
     start_time = time.time()
     for epoch in range(args.start_epoch, args.epochs):
-
-        # # Validation set
-        # with torch.no_grad():
-        #     generate_evaluation_outputs(args, 'valid', model, criterion, data_loader_valid, optimizer,
-        #              device, epoch, args.clip_max_norm)
 
         # Test set
         # Find out the name of the folder in which the predictions will be saved
