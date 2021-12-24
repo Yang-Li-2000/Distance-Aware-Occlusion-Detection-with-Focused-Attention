@@ -152,6 +152,7 @@ def main(args):
     device = torch.device(args.device)
 
     print()
+    print("GPU_MEMORY_PRESSURE_TEST     ", GPU_MEMORY_PRESSURE_TEST)
     print("USE_SMALL_ANNOTATION_FILE:   ", USE_SMALL_ANNOTATION_FILE)
     print("USE_OPTIMAL_TRANSPORT:       ", USE_OPTIMAL_TRANSPORT)
     print("USE_DEPTH_DURING_TRAINING:   ", USE_DEPTH_DURING_TRAINING)
@@ -327,7 +328,7 @@ def main(args):
     for epoch in range(args.start_epoch, args.epochs):
         if args.distributed:
             sampler_train.set_epoch(epoch)
-        if epoch == 0 and not USE_SMALL_VALID_ANNOTATION_FILE and not USE_SMALL_ANNOTATION_FILE:
+        if epoch == 0 and not USE_SMALL_VALID_ANNOTATION_FILE and not USE_SMALL_ANNOTATION_FILE and not GPU_MEMORY_PRESSURE_TEST:
             # Validate before training
             print("Validate before training:")
             with torch.no_grad():

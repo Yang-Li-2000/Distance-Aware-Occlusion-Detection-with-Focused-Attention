@@ -65,6 +65,10 @@ PERSISTENT_WORKERS=True
 num_workers_validation = 8 # 16
 batch_size_validation = 10  # 30
 
+# Uses the maximum resolution, instead of randomly select from scales,
+# to test if GPU memory is enough for training
+GPU_MEMORY_PRESSURE_TEST = False
+
 # Attention Visualization
 VISUALIZE_ATTENTION_WEIGHTS = False
 

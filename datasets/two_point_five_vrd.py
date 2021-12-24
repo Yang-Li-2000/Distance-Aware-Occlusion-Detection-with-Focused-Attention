@@ -469,6 +469,8 @@ class Compose(object):
 
 def make_hico_transforms(image_set, test_scale=-1):
     scales = [480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800]
+    if GPU_MEMORY_PRESSURE_TEST:
+        scales = [800]
     # mean and std for OIDv4 training set
     mean = [0.38582161319756497, 0.417059363143913, 0.44746641122649666]
     std = [0.2928927708221023, 0.28587472243230755, 0.2924566717392719]
@@ -480,19 +482,29 @@ def make_hico_transforms(image_set, test_scale=-1):
         Normalize(mean, std, depth_mean, depth_std),
     ])
     if image_set == 'train':
-        return Compose([
-            RandomHorizontalFlip(),
-            RandomAdjustImage(),
-            RandomSelect(
-                RandomResize(scales, max_size=1333),
-                Compose([
-                    RandomResize([400, 500, 600]),
-                    #RandomSizeCrop(384, 600),
+        if not GPU_MEMORY_PRESSURE_TEST:
+            return Compose([
+                RandomHorizontalFlip(),
+                RandomAdjustImage(),
+                RandomSelect(
                     RandomResize(scales, max_size=1333),
-                ])
-            ),
-            normalize,
-        ])
+                    Compose([
+                        RandomResize([400, 500, 600]),
+                        RandomResize(scales, max_size=1333),
+                    ])
+                ),
+                normalize,
+            ])
+        else:
+            return Compose([
+                RandomHorizontalFlip(),
+                RandomAdjustImage(),
+                RandomSelect(
+                    RandomResize(scales, max_size=1333),
+                    RandomResize(scales, max_size=1333)
+                ),
+                normalize,
+            ])
     if image_set == 'test' or image_set == 'valid':
         if test_scale == -1:
             return Compose([
