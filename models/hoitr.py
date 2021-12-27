@@ -58,9 +58,11 @@ class HoiTR(nn.Module):
         self.aux_loss = aux_loss
 
         self.human_cls_embed = nn.Linear(hidden_dim, num_humans + 1)
-        self.human_box_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        if not IMPROVE_INTERMEDIATE_LAYERS:
+            self.human_box_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.object_cls_embed = nn.Linear(hidden_dim, num_classes + 1)
-        self.object_box_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        if not IMPROVE_INTERMEDIATE_LAYERS:
+            self.object_box_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.action_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
         self.occlusion_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
         if PREDICT_INTERSECTION_BOX:
@@ -110,18 +112,36 @@ class HoiTR(nn.Module):
             writer.add_image("image", samples.tensors[0] * std + mean)
 
         if CASCADE:
-            hs, distance_decoder_out, occlusion_decoder_out = \
-                self.transformer(self.input_proj(src), mask, self.query_embed.weight,
-                                 pos[-1])[:3]
+            if IMPROVE_INTERMEDIATE_LAYERS:
+                hs, distance_decoder_out, occlusion_decoder_out, human_outputs_coord, object_outputs_coord = \
+                    self.transformer(self.input_proj(src), mask,
+                                     self.query_embed.weight,
+                                     pos[-1])[:5]
+            else:
+                hs, distance_decoder_out, occlusion_decoder_out = \
+                    self.transformer(self.input_proj(src), mask,
+                                     self.query_embed.weight,
+                                     pos[-1])[:3]
         else:
-            hs = \
-                self.transformer(self.input_proj(src), mask, self.query_embed.weight,
-                                 pos[-1], writer=writer)[0]
+            if IMPROVE_INTERMEDIATE_LAYERS:
+                hs, human_outputs_coord, object_outputs_coord = \
+                    self.transformer(self.input_proj(src), mask,
+                                     self.query_embed.weight,
+                                     pos[-1], writer=writer)[:3]
+            else:
+                hs = \
+                    self.transformer(self.input_proj(src), mask,
+                                     self.query_embed.weight,
+                                     pos[-1], writer=writer)[0]
 
         human_outputs_class = self.human_cls_embed(hs)
-        human_outputs_coord = self.human_box_embed(hs).sigmoid()
         object_outputs_class = self.object_cls_embed(hs)
-        object_outputs_coord = self.object_box_embed(hs).sigmoid()
+        if IMPROVE_INTERMEDIATE_LAYERS:
+            human_outputs_coord = human_outputs_coord.permute(0, 2, 1, 3)
+            object_outputs_coord = object_outputs_coord.permute(0, 2, 1, 3)
+        else:
+            human_outputs_coord = self.human_box_embed(hs).sigmoid()
+            object_outputs_coord = self.object_box_embed(hs).sigmoid()
 
 
         if CASCADE:

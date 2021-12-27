@@ -159,6 +159,7 @@ def main(args):
     print("PREDICT_INTERSECTION_BOX:    ", PREDICT_INTERSECTION_BOX)
     print("USE_RAW_DISTANCE_LABELS:     ", USE_RAW_DISTANCE_LABELS)
     print("USE_RAW_OCCLUSION_LABELS:    ", USE_RAW_OCCLUSION_LABELS)
+    print("IMPROVE_INTERMEDIATE_LAYERS: ", IMPROVE_INTERMEDIATE_LAYERS)
     print("CASCADE:                     ", CASCADE)
     if CASCADE:
         print("dec_layers | dec_layers_distance | dec_layers_occlusion: ")
