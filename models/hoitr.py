@@ -58,9 +58,9 @@ class HoiTR(nn.Module):
         self.aux_loss = aux_loss
 
         self.human_cls_embed = nn.Linear(hidden_dim, num_humans + 1)
-        self.human_box_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        #self.human_box_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.object_cls_embed = nn.Linear(hidden_dim, num_classes + 1)
-        self.object_box_embed = MLP(hidden_dim, hidden_dim, 4, 3)
+        #self.object_box_embed = MLP(hidden_dim, hidden_dim, 4, 3)
         self.action_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
         self.occlusion_cls_embed = nn.Linear(hidden_dim, num_actions + 1)
         if PREDICT_INTERSECTION_BOX:
