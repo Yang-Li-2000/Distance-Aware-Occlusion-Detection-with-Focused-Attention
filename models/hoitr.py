@@ -111,6 +111,18 @@ class HoiTR(nn.Module):
             std = torch.tensor([0.2928927708221023, 0.28587472243230755, 0.2924566717392719]).unsqueeze(1).unsqueeze(1).to(device)
             writer.add_image("image", samples.tensors[0] * std + mean)
 
+        """
+        backbone.num_channels:      2048 (res101) or 1024 (swin)
+        hidden_dim:                 256
+        
+        samples.tensors:            [BS, 3, H, W]
+        src:                        [BS, backbone.num_channels, ceil(H/32), ceil(W/32)]
+        self.input_proj(src):       [BS, hidden_dim, ceil(H/32), ceil(W/32)]
+        mask:                       [BS, ceil(H/32), ceil(W/32)]
+        self.query_embed.weight:    [num_queries, hidden_dim]
+        pos[-1]:                    [BS, hidden_dim, ceil(H/32), ceil(W/32)]
+        hs:                         [6, BS, num_queries, hidden_dim]                   
+        """
         if CASCADE:
             if IMPROVE_INTERMEDIATE_LAYERS:
                 hs, distance_decoder_out, occlusion_decoder_out, human_outputs_coord, object_outputs_coord = \

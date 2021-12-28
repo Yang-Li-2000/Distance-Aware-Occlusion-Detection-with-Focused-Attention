@@ -64,11 +64,27 @@ class Transformer(nn.Module):
     def forward(self, src, mask, query_embed, pos_embed, writer=None):
         # flatten NxCxHxW to HWxNxC
         bs, c, h, w = src.shape
+        """
+        h = ceil(H/32)
+        w = ceil(W/32)
+        
+        query_embed is nn.Embedding().weight
+        
+        src:                [BS, 256, h, w]
+        pos_embed:          [BS, 256, h, w]
+        query_embed:        [100, 256]
+        mask:               [BS, h, w]
+        """
         src = src.flatten(2).permute(2, 0, 1)
         pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
         query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
         mask = mask.flatten(1)
-
+        """
+        src:                [h*w, BS, 256]
+        pos_embed:          [h*w, BS, 256]
+        query_embed:        [100, BS, 256]
+        mask:               [BS, h*w]
+        """
         tgt = torch.zeros_like(query_embed)
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
         if IMPROVE_INTERMEDIATE_LAYERS:
@@ -280,10 +296,18 @@ class TransformerEncoderLayer(nn.Module):
                      src_key_padding_mask: Optional[Tensor] = None,
                      pos: Optional[Tensor] = None):
         q = k = self.with_pos_embed(src, pos)
+        """
+        By default, 
+        src_mask is None, 
+        src_key_padding_mask is [BS, h*w]
+        """
+        # Self-Attention
         src2 = self.self_attn(q, k, value=src, attn_mask=src_mask,
                               key_padding_mask=src_key_padding_mask)[0]
         src = src + self.dropout1(src2)
         src = self.norm1(src)
+
+        # Feed Forward
         src2 = self.linear2(self.dropout(self.activation(self.linear1(src))))
         src = src + self.dropout2(src2)
         src = self.norm2(src)
@@ -309,6 +333,10 @@ class TransformerEncoderLayer(nn.Module):
                 pos: Optional[Tensor] = None):
         if self.normalize_before:
             return self.forward_pre(src, src_mask, src_key_padding_mask, pos)
+        """
+        By default, self.normalize_before is False,
+        so forward_post will be used
+        """
         return self.forward_post(src, src_mask, src_key_padding_mask, pos)
 
 
@@ -317,6 +345,15 @@ class TransformerDecoderLayer(nn.Module):
     def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1,
                  activation="relu", normalize_before=False):
         super().__init__()
+        """
+        By default, 
+        d_model = 256, 
+        nhead = 8, 
+        dim_feedforward = 2048, 
+        dropout = 0.1,
+        activation = 'relu'
+        normalize_before = False
+        """
         self.self_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
         self.multihead_attn = nn.MultiheadAttention(d_model, nhead, dropout=dropout)
         # Implementation of Feedforward model
@@ -347,19 +384,36 @@ class TransformerDecoderLayer(nn.Module):
                      writer=None,
                      shape=None,
                      layer_index=-1):
+        """
+        """
+        """
+        tgt:            [100, 2, 256]
+        query_pos       [100, 2, 256]
+        
+        Initially, q = k = query_pos = nn.Embedding().weight
+        """
+        # Self-Attention
         q = k = self.with_pos_embed(tgt, query_pos)
         tgt2 = self.self_attn(q, k, value=tgt, attn_mask=tgt_mask,
                               key_padding_mask=tgt_key_padding_mask)[0]
         tgt = tgt + self.dropout1(tgt2)
         tgt = self.norm1(tgt)
-        tgt2 = self.multihead_attn(query=self.with_pos_embed(tgt, query_pos),
+        """
+        In the first decoder layer, tgt was made of zeros before summing with tgt2.
+        Therefore, 
+        tgt = self.norm1(self.dropout1(tgt2)) = outputs of self.self_attn().
+        
+        In other words, tgt is obtained through 
+        self_attention --> dropout --> layer_norm (first layer)
+        OR
+        self_attention --> dropout --> add to previoius tgt --> layer_norm (subsequent layers)
+        """
+
+        # Multi-Head Attention
+        tgt2, attention_weights = self.multihead_attn(query=self.with_pos_embed(tgt, query_pos),
                                    key=self.with_pos_embed(memory, pos),
                                    value=memory, attn_mask=memory_mask,
-                                   key_padding_mask=memory_key_padding_mask)[0]
-        attention_weights = self.multihead_attn(query=self.with_pos_embed(tgt, query_pos),
-                                   key=self.with_pos_embed(memory, pos),
-                                   value=memory, attn_mask=memory_mask,
-                                   key_padding_mask=memory_key_padding_mask)[1]
+                                   key_padding_mask=memory_key_padding_mask)[0:2]
         if VISUALIZE_ATTENTION_WEIGHTS:
             bs, c, h, w = shape
             #writer.add_images('attention weights ' + str(layer_index), attention_weights[0].view(100, h, w).unsqueeze(1), dataformats='NCHW')
@@ -368,9 +422,22 @@ class TransformerDecoderLayer(nn.Module):
                 writer.add_image('attention weights ' + str(layer_index) + '/' + str(i), attention_weights[0][i].view(h, w) * 255, dataformats='HW')
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
+        """
+        tgt above is obtained through
+        multi_head_attention --> dropout --> add to previous tgt --> layer_norm
+        """
+
+        # Feed Forward
         tgt2 = self.linear2(self.dropout(self.activation(self.linear1(tgt))))
         tgt = tgt + self.dropout3(tgt2)
         tgt = self.norm3(tgt)
+        """
+        tgt above is obtained through
+        linear --> activation --> dropout --> linear --> dropout 
+        --> add to previous tgt --> layer_norm
+        """
+
+
         return tgt
 
     def forward_pre(self, tgt, memory,
@@ -409,6 +476,10 @@ class TransformerDecoderLayer(nn.Module):
         if self.normalize_before:
             return self.forward_pre(tgt, memory, tgt_mask, memory_mask,
                                     tgt_key_padding_mask, memory_key_padding_mask, pos, query_pos)
+        """
+        By default, self.normalize_before is False,
+        so self.forward_post will be used
+        """
         return self.forward_post(tgt, memory, tgt_mask, memory_mask,
                                  tgt_key_padding_mask, memory_key_padding_mask, pos, query_pos, writer, shape, layer_index)
 
