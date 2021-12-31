@@ -121,7 +121,7 @@ class HoiTR(nn.Module):
         mask:                       [BS, ceil(H/32), ceil(W/32)]
         self.query_embed.weight:    [num_queries, hidden_dim]
         pos[-1]:                    [BS, hidden_dim, ceil(H/32), ceil(W/32)]
-        hs:                         [6, BS, num_queries, hidden_dim]                   
+        hs:                         [6, BS, num_queries, hidden_dim]     
         """
         if CASCADE:
             if IMPROVE_INTERMEDIATE_LAYERS:

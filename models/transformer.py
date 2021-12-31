@@ -75,6 +75,7 @@ class Transformer(nn.Module):
         query_embed:        [100, 256]
         mask:               [BS, h, w]
         """
+        # Flatten visual features
         src = src.flatten(2).permute(2, 0, 1)
         pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
         query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
@@ -85,8 +86,16 @@ class Transformer(nn.Module):
         query_embed:        [100, BS, 256]
         mask:               [BS, h*w]
         """
+
+        # Encoder
         tgt = torch.zeros_like(query_embed)
         memory = self.encoder(src, src_key_padding_mask=mask, pos=pos_embed)
+        """
+        tgt:                [100, BS, 256]
+        memory:             [h*w, BS, 256]
+        """
+
+        # Decoder
         if IMPROVE_INTERMEDIATE_LAYERS:
             hs, human_outputs_coord, object_outputs_coord = \
                 self.decoder(tgt, memory, memory_key_padding_mask=mask,
@@ -105,6 +114,7 @@ class Transformer(nn.Module):
                 return hs.transpose(1, 2), memory.permute(1, 2, 0).view(bs, c, h, w)
         else:
             hs = hs.transpose(1, 2)
+
             # Distance
             distance_query_embed = hs[-1]
             distance_query_embed = distance_query_embed.permute(1, 0, 2)
@@ -295,6 +305,7 @@ class TransformerEncoderLayer(nn.Module):
                      src_mask: Optional[Tensor] = None,
                      src_key_padding_mask: Optional[Tensor] = None,
                      pos: Optional[Tensor] = None):
+        # Add position encodings to flattened visual features
         q = k = self.with_pos_embed(src, pos)
         """
         By default, 
