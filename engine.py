@@ -174,6 +174,8 @@ def train_one_epoch(args, writer, model: torch.nn.Module, criterion: torch.nn.Mo
         # Forward pass
         outputs = model(samples, pos_depth=pos_depth, writer=writer)
 
+        # Compute losses using outputs (after matching targets using the
+        # Hungarian algorithm or optimal transport)
         loss_dict = criterion(outputs, targets, optimal_transport=optimal_transport)
         weight_dict = criterion.weight_dict
 

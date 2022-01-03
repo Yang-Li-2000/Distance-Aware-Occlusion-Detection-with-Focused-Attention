@@ -82,6 +82,7 @@ class HungarianMatcher(nn.Module):
         # The 1 is a constant that doesn't change the matching, it can be ommitted.
         human_cost_class = -human_out_prob[:, human_tgt_ids]
         object_cost_class = -object_out_prob[:, object_tgt_ids]
+        # TODO: find a better strategy to compuate cost for distance and occlusion when using raw labels
         action_cost_class = -action_out_prob[:, action_tgt_ids]
         occlusion_cost_class = -occlusion_out_prob[:, occlusion_tgt_ids]
 

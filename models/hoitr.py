@@ -146,16 +146,18 @@ class HoiTR(nn.Module):
                                      self.query_embed.weight,
                                      pos[-1], writer=writer)[0]
 
+
+        # [1/3] Output object classes
         human_outputs_class = self.human_cls_embed(hs)
         object_outputs_class = self.object_cls_embed(hs)
+        # [3/3] Output object boxes
         if IMPROVE_INTERMEDIATE_LAYERS:
             human_outputs_coord = human_outputs_coord.permute(0, 2, 1, 3)
             object_outputs_coord = object_outputs_coord.permute(0, 2, 1, 3)
         else:
             human_outputs_coord = self.human_box_embed(hs).sigmoid()
             object_outputs_coord = self.object_box_embed(hs).sigmoid()
-
-
+        # [3/3] Output relationship classes
         if CASCADE:
             action_outputs_class = self.action_cls_embed(distance_decoder_out)
             occlusion_outputs_class = self.occlusion_cls_embed(occlusion_decoder_out)
@@ -166,7 +168,7 @@ class HoiTR(nn.Module):
             occlusion_outputs_class = self.occlusion_cls_embed(hs)
             if PREDICT_INTERSECTION_BOX:
                 intersection_outputs_coord = self.intersection_box_embed(hs).sigmoid()
-
+        # Combine all outputs into a single dict object
         out = {
             'human_pred_logits': human_outputs_class[-1],
             'human_pred_boxes': human_outputs_coord[-1],
@@ -175,10 +177,11 @@ class HoiTR(nn.Module):
             'action_pred_logits': action_outputs_class[-1],
             'occlusion_pred_logits': occlusion_outputs_class[-1]
         }
-
+        # Add output intersection boxes into the above dict
         if PREDICT_INTERSECTION_BOX:
             out['intersection_pred_boxes'] = intersection_outputs_coord[-1]
 
+        # Auxiliary Loss as a dict object
         if self.aux_loss:
             if PREDICT_INTERSECTION_BOX:
                 out['aux_outputs'] = self._set_aux_loss_intersection(
@@ -549,7 +552,7 @@ class SetCriterion(nn.Module):
         return loss_map[loss](outputs, targets, indices, num_boxes, **kwargs)
 
     def forward(self, outputs, targets, optimal_transport=None, training=True):
-        """ This performs the loss computation.
+        """ This performs target matching and loss computation.
         Parameters:
              outputs: dict of tensors, see the output specification of the
                     model for the format
@@ -560,6 +563,7 @@ class SetCriterion(nn.Module):
         outputs_without_aux = {k: v for k, v in outputs.items() if
                                k != 'aux_outputs'}
 
+        # Target matching:
         # Retrieve the matching between the outputs of the
         # last layer and the targets
         if USE_OPTIMAL_TRANSPORT and training:
