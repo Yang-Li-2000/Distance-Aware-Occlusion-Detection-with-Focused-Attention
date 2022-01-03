@@ -572,7 +572,7 @@ class SetCriterion(nn.Module):
         else:
             indices = self.matcher(outputs_without_aux, targets)
 
-        # Compute the average number of target boxes accross all nodes,
+        # Compute the average number of target boxes across all nodes,
         # for normalization purposes
         if USE_OPTIMAL_TRANSPORT and training:
             num_boxes = np.sum([len(k[0]) for k in indices])
