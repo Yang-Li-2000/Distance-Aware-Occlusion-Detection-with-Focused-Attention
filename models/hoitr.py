@@ -128,12 +128,14 @@ class HoiTR(nn.Module):
                 hs, distance_decoder_out, occlusion_decoder_out, human_outputs_coord, object_outputs_coord = \
                     self.transformer(self.input_proj(src), mask,
                                      self.query_embed.weight,
-                                     pos[-1])[:5]
+                                     pos[-1],
+                                     writer=writer)[:5]
             else:
                 hs, distance_decoder_out, occlusion_decoder_out = \
                     self.transformer(self.input_proj(src), mask,
                                      self.query_embed.weight,
-                                     pos[-1])[:3]
+                                     pos[-1],
+                                     writer=writer)[:3]
         else:
             if IMPROVE_INTERMEDIATE_LAYERS:
                 hs, human_outputs_coord, object_outputs_coord = \
