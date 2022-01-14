@@ -25,6 +25,8 @@ from .transformer import build_transformer
 
 from magic_numbers import *
 
+import temp_vars
+
 # This will be modified by build() if train on 2.5vrd
 num_humans = 2
 
@@ -105,11 +107,12 @@ class HoiTR(nn.Module):
             # Add pos_depth to positional encoding
             pos[-1] = pos[-1] + pos_depth
 
+        # Save current image
         if VISUALIZE_ATTENTION_WEIGHTS:
             device = samples.tensors.device
             mean = torch.tensor([0.38582161319756497, 0.417059363143913, 0.44746641122649666]).unsqueeze(1).unsqueeze(1).to(device)
             std = torch.tensor([0.2928927708221023, 0.28587472243230755, 0.2924566717392719]).unsqueeze(1).unsqueeze(1).to(device)
-            writer.add_image("image", samples.tensors[0] * std + mean)
+            temp_vars.image = samples.tensors[0] * std + mean
 
         """
         backbone.num_channels:      2048 (res101) or 1024 (swin)
@@ -123,6 +126,13 @@ class HoiTR(nn.Module):
         pos[-1]:                    [BS, hidden_dim, ceil(H/32), ceil(W/32)]
         hs:                         [6, BS, num_queries, hidden_dim]     
         """
+        # Set temp variables for attention weights to empty lists
+        if VISUALIZE_ATTENTION_WEIGHTS:
+            temp_vars.attention_pair_decoder = []
+            temp_vars.attention_distance_decoder = []
+            temp_vars.attention_occlusion_decoder = []
+
+        # Forward pass through transformer encoder rand decoders
         if CASCADE:
             if IMPROVE_INTERMEDIATE_LAYERS:
                 hs, distance_decoder_out, occlusion_decoder_out, human_outputs_coord, object_outputs_coord = \
@@ -148,7 +158,7 @@ class HoiTR(nn.Module):
                                      self.query_embed.weight,
                                      pos[-1], writer=writer)[0]
 
-
+        # Forward pass through MLPs
         # [1/3] Output object classes
         human_outputs_class = self.human_cls_embed(hs)
         object_outputs_class = self.object_cls_embed(hs)
@@ -204,6 +214,11 @@ class HoiTR(nn.Module):
                     action_outputs_class,
                     occlusion_outputs_class
                 )
+
+        # TODO: call another function to produce overlaid attention weights
+        #  and free GPU memory occupied by variables in temp_vars.py.
+        #  Preferably find out the ones with the highest scores
+        #  (those sorted and outputted by process_model_outputs.py)
 
         return out
 

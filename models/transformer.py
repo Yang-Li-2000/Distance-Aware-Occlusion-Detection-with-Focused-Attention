@@ -14,6 +14,7 @@ import torch
 import torch.nn.functional as F
 from torch import nn, Tensor
 from magic_numbers import *
+import temp_vars
 
 
 class Transformer(nn.Module):
@@ -96,6 +97,8 @@ class Transformer(nn.Module):
         """
 
         # Decoder
+        if VISUALIZE_ATTENTION_WEIGHTS:
+            temp_vars.current_decoder = 'pair'
         if IMPROVE_INTERMEDIATE_LAYERS:
             hs, human_outputs_coord, object_outputs_coord = \
                 self.decoder(tgt, memory, memory_key_padding_mask=mask,
@@ -116,6 +119,8 @@ class Transformer(nn.Module):
             hs = hs.transpose(1, 2)
 
             # Distance
+            if VISUALIZE_ATTENTION_WEIGHTS:
+                temp_vars.current_decoder = 'dist'
             distance_query_embed = hs[-1]
             distance_query_embed = distance_query_embed.permute(1, 0, 2)
             distance_tgt = torch.zeros_like(distance_query_embed)
@@ -124,29 +129,33 @@ class Transformer(nn.Module):
                                                                    memory,
                                                                    memory_key_padding_mask=mask,
                                                                    pos=pos_embed,
-                                                                   query_pos=distance_query_embed)
+                                                                   query_pos=distance_query_embed,
+                                                                   shape=(bs, c, h, w))
             else:
                 distance_decoder_out = self.distance_decoder(distance_tgt,
                                                              memory,
                                                              memory_key_padding_mask=mask,
                                                              pos=pos_embed,
-                                                             query_pos=distance_query_embed)
+                                                             query_pos=distance_query_embed,
+                                                             shape=(bs, c, h, w))
             distance_decoder_out = distance_decoder_out.transpose(1, 2)
 
             # Occlusion
+            if VISUALIZE_ATTENTION_WEIGHTS:
+                temp_vars.current_decoder = 'occl'
             occlusion_query_embed = hs[-1]
             occlusion_query_embed = occlusion_query_embed.permute(1, 0, 2)
             occlusion_tgt = torch.zeros_like(occlusion_query_embed)
             if IMPROVE_INTERMEDIATE_LAYERS:
                 occlusion_decoder_out, _, _ = self.occlusion_decoder(
                     occlusion_tgt, memory, memory_key_padding_mask=mask,
-                    pos=pos_embed, query_pos=occlusion_query_embed)
+                    pos=pos_embed, query_pos=occlusion_query_embed,shape=(bs, c, h, w))
             else:
                 occlusion_decoder_out = self.occlusion_decoder(occlusion_tgt,
                                                                memory,
                                                                memory_key_padding_mask=mask,
                                                                pos=pos_embed,
-                                                               query_pos=occlusion_query_embed)
+                                                               query_pos=occlusion_query_embed,shape=(bs, c, h, w))
             occlusion_decoder_out = occlusion_decoder_out.transpose(1, 2)
 
             if IMPROVE_INTERMEDIATE_LAYERS:
@@ -252,8 +261,7 @@ class TransformerDecoder(nn.Module):
             layer_index += 1
             if self.return_intermediate:
                 intermediate.append(self.norm(output))
-        if VISUALIZE_ATTENTION_WEIGHTS:
-            breakpoint()
+
         if self.norm is not None:
             output = self.norm(output)
             if self.return_intermediate:
@@ -427,10 +435,21 @@ class TransformerDecoderLayer(nn.Module):
                                    key_padding_mask=memory_key_padding_mask)[0:2]
         if VISUALIZE_ATTENTION_WEIGHTS:
             bs, c, h, w = shape
-            #writer.add_images('attention weights ' + str(layer_index), attention_weights[0].view(100, h, w).unsqueeze(1), dataformats='NCHW')
-            for i in range(100):
-                #writer.add_image('attention weights ' + str(layer_index), attention_weights[0][i].view(h, w) * 255, dataformats='HW', global_step=i)
-                writer.add_image('attention weights ' + str(layer_index) + '/' + str(i), attention_weights[0][i].view(h, w) * 255, dataformats='HW')
+
+            # Reshape flatten attention weights to h * w
+            assert attention_weights.shape[0] == 1
+            attention_weights = attention_weights.detach()          # detach
+            attention_weights = attention_weights.squeeze(0)        # squeeze
+            attention_weights = attention_weights.view(-1, h, w)    # reshape
+
+            # Store attention weights
+            if temp_vars.current_decoder == 'pair':
+                temp_vars.attention_pair_decoder.append(attention_weights)
+            elif temp_vars.current_decoder == 'dist':
+                temp_vars.attention_distance_decoder.append(attention_weights)
+            elif temp_vars.current_decoder == 'occl':
+                temp_vars.attention_occlusion_decoder.append(attention_weights)
+
         tgt = tgt + self.dropout2(tgt2)
         tgt = self.norm2(tgt)
         """

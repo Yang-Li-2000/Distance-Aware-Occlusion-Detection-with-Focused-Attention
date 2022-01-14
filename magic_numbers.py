@@ -32,19 +32,22 @@ CYCLIC_MAX_LR = 0.000035
 CYCLIC_STEP_SIZE_UP = 5
 CYCLIC_STEP_SIZE_DOWN = 5
 
-# Thresholds above which generate_hoi_list_using_model_outputs() will add a hoi to hoi_list
+# When processing model outputs, in addition to relationship scores,
+# whether to consider object scores or not
+SORT_USING_OBJECT_SCORES = False
+# (Before sorting) Thresholds above which generate_hoi_list_using_model_outputs() will add a hoi to hoi_list
 human_th=0
 object_th=0
 hoi_th=0
 occlusion_th=0
-# nms thresholds in triplet_nms_for_vrd()
-nms_iou_human = 0.7
-nms_iou_object = 0.7
-# threshold in generate_hoi_list_using_model_outputs() when filter=True
+# (After sorting) threshold in generate_hoi_list_using_model_outputs() when filter=True
 human_th_debug = 0
 object_th_debug = 0
 hoi_th_debug = 0
 occlusion_th_debug = 0
+# nms thresholds in triplet_nms_for_vrd()
+nms_iou_human = 0.7
+nms_iou_object = 0.7
 
 # Whether to use optimal transport. If not, use the Hungarian matcher.
 USE_OPTIMAL_TRANSPORT = False
