@@ -19,7 +19,8 @@ def construct_evaluation_output_using_hoi_list(hoi_list, original_targets,
                                                ymin_2_list,
                                                ymax_2_list,
                                                distance_list,
-                                               occlusion_list
+                                               occlusion_list,
+                                               index_list=None
                                                ):
 
     # batch level
@@ -35,20 +36,35 @@ def construct_evaluation_output_using_hoi_list(hoi_list, original_targets,
         # TODO: Record the numbers that caused the exceptions.
         num_hoi_to_produce = min(num_hoi_to_produce, len(hoi_list[i]['hoi_list']))
 
+        if VISUALIZE_ATTENTION_WEIGHTS:
+            num_hoi_to_produce = len(hoi_list[i]['hoi_list'])
+
         for j in range(num_hoi_to_produce):
             current_hoi = hoi_list[i]['hoi_list'][j]
 
             image_id_1 = current_image_id
-            entity_1 = name_to_entity(current_hoi['h_name'])
+            image_id_2 = current_image_id
+
+            # object A name
+            object_A_name = current_hoi['h_name']
+            entity_1 = name_to_entity(object_A_name)
+
+            # object A box
             xmin_1, ymin_1, xmax_1, ymax_1 = current_hoi['h_box']
             xmin_1, ymin_1, xmax_1, ymax_1 = xmin_1/ww, ymin_1/hh, xmax_1/ww, ymax_1/hh
 
-            image_id_2 = current_image_id
-            entity_2 = name_to_entity(current_hoi['o_name'])
+            # object B name
+            object_B_name = current_hoi['o_name']
+            entity_2 = name_to_entity(object_B_name)
+
+            # object B box
             xmin_2, ymin_2, xmax_2, ymax_2 = current_hoi['o_box']
             xmin_2, ymin_2, xmax_2, ymax_2 = xmin_2/ww, ymin_2/hh, xmax_2/ww, ymax_2/hh
 
+            # distance name
             distance = distance_name_to_id[current_hoi['i_name']]
+
+            # occlusion name
             occlusion = occlusion_name_to_id[current_hoi['ocl_name']]
 
             # TODO: record confidence level of objects to facilitate debugging
@@ -82,5 +98,11 @@ def construct_evaluation_output_using_hoi_list(hoi_list, original_targets,
             ymax_2_list.append(ymax_2.item())
             distance_list.append(distance)
             occlusion_list.append(occlusion)
+
+            # index
+            if index_list is not None:
+                index = current_hoi['index']
+                assert type(index) == int
+                index_list.append(index)
 
     return

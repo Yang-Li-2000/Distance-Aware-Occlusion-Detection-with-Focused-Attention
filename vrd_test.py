@@ -143,7 +143,8 @@ def main(args):
     data_loader_test = DataLoader(dataset_test,
                                    batch_sampler=batch_sampler_test,
                                    collate_fn=utils.collate_fn,
-                                   num_workers=args.num_workers)
+                                   num_workers=args.num_workers,
+                                  shuffle=False)
 
     # Load model from checkpoint
     checkpoint = torch.load(args.resume, map_location='cpu')
@@ -184,6 +185,8 @@ def main(args):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser('HOI Transformer test script', parents=[get_args_parser()])
     args = parser.parse_args()
+    if VISUALIZE_ATTENTION_WEIGHTS:
+        args.batch_size = 1
     # if args.output_dir:
     #     Path(args.output_dir).mkdir(parents=True, exist_ok=True)
     main(args)

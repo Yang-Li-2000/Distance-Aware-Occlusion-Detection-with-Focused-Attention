@@ -29,6 +29,7 @@ from util.misc import (NestedTensor, nested_tensor_from_tensor_list,
                        accuracy, get_world_size, interpolate,
                        is_dist_avail_and_initialized)
 import time
+import temp_vars
 
 
 def progressBar(i, max, text):
@@ -418,6 +419,29 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
     ymax_2_list = list()
     distance_list = list()
     occlusion_list = list()
+    # this stores the attention weight index that correspond to each prediction
+    if VISUALIZE_ATTENTION_WEIGHTS:
+        index_list = list()
+    else:
+        index_list = None
+
+    # Create folders to store results
+    file_name = args.output_name
+    attention_folder_name = 'attention'
+    if folder_name:
+        if not os.path.exists(folder_name):
+            os.mkdir(folder_name)
+        # create a sub folder to store predictions
+        # when visualizing attention weights
+        if VISUALIZE_ATTENTION_WEIGHTS:
+            folder_name = folder_name + '/' + attention_folder_name
+            if not os.path.exists(folder_name):
+                os.mkdir(folder_name)
+    else:
+        if VISUALIZE_ATTENTION_WEIGHTS:
+            folder_name = attention_folder_name
+            if not os.path.exists(folder_name):
+                os.mkdir(folder_name)
 
     start_time = time.time()
 
@@ -448,8 +472,10 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
         # Forward pass
         outputs = model(samples, pos_depth)
 
-        # Construct Evaluation Outputs
+        # Construct Evaluation Outputs for all images in current batch
         hoi_list = generate_hoi_list_using_model_outputs(args, outputs, original_targets, filter=True)
+
+        # Transform hoi list into the format required by the evaluation script
         construct_evaluation_output_using_hoi_list(hoi_list,
                                                    original_targets,
                                                    image_id_1_list,
@@ -465,7 +491,24 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
                                                    ymin_2_list,
                                                    ymax_2_list,
                                                    distance_list,
-                                                   occlusion_list)
+                                                   occlusion_list,
+                                                   index_list)
+
+        # TODO: write attention weights to disk (Not implemented for batch_size > 1)
+        assert args.batch_size == 1
+        image_name = hoi_list[0]['image_id'][:-4]
+        pair_decoder_attention_suffix = '_attention_pair_decoderr.pt'
+        dist_decoder_attention_suffix = '_attention_dist_decoderr.pt'
+        occl_decoder_attention_suffix = '_attention_occl_decoderr.pt'
+
+        pair_decoder_attention_path = folder_name + '/' + image_name + pair_decoder_attention_suffix
+        dist_decoder_attention_path = folder_name + '/' + image_name + dist_decoder_attention_suffix
+        occl_decoder_attention_path = folder_name + '/' + image_name + occl_decoder_attention_suffix
+
+        # Write attention weights to disk
+        torch.save(temp_vars.attention_pair_decoder[-1], pair_decoder_attention_path)
+        torch.save(temp_vars.attention_distance_decoder[-1], dist_decoder_attention_path)
+        torch.save(temp_vars.attention_occlusion_decoder[-1], occl_decoder_attention_path)
 
         iteratoin_count += 1
 
@@ -493,48 +536,76 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
                         + '/'
                         + str(estimated_h) + 'h-' + str(estimated_m).zfill(2) + 'm-' + str(estimated_s).zfill(2) + 's    ')
 
-    # Save Evaluation Outputs to a DataFrame
-    df = pd.DataFrame({'image_id_1': image_id_1_list,
-                       'entity_1': entity_1_list,
-                       'xmin_1': xmin_1_list,
-                       'xmax_1': xmax_1_list,
-                       'ymin_1': ymin_1_list,
-                       'ymax_1': ymax_1_list,
-                       'image_id_2': image_id_2_list,
-                       'entity_2': entity_2_list,
-                       'xmin_2': xmin_2_list,
-                       'xmax_2': xmax_2_list,
-                       'ymin_2': ymin_2_list,
-                       'ymax_2': ymax_2_list,
-                       'occlusion': occlusion_list,
-                       'distance': distance_list,
-                       })
-    # Make sure the data type for each column is correct
-    df.astype({'image_id_1': 'str',
-               'entity_1': 'str',
-               'xmin_1': 'float',
-               'xmax_1': 'float',
-               'ymin_1': 'float',
-               'ymax_1': 'float',
-               'image_id_2': 'str',
-               'entity_2': 'str',
-               'xmin_2': 'float',
-               'xmax_2': 'float',
-               'ymin_2': 'float',
-               'ymax_2': 'float',
-               'occlusion': 'int',
-               'distance': 'int'})
+    if not VISUALIZE_ATTENTION_WEIGHTS:
+        # Store Evaluation Outputs to a DataFrame
+        df = pd.DataFrame({'image_id_1': image_id_1_list,
+                           'entity_1': entity_1_list,
+                           'xmin_1': xmin_1_list,
+                           'xmax_1': xmax_1_list,
+                           'ymin_1': ymin_1_list,
+                           'ymax_1': ymax_1_list,
+                           'image_id_2': image_id_2_list,
+                           'entity_2': entity_2_list,
+                           'xmin_2': xmin_2_list,
+                           'xmax_2': xmax_2_list,
+                           'ymin_2': ymin_2_list,
+                           'ymax_2': ymax_2_list,
+                           'occlusion': occlusion_list,
+                           'distance': distance_list,
+                           })
+        # Make sure the data type for each column is correct
+        df.astype({'image_id_1': 'str',
+                   'entity_1': 'str',
+                   'xmin_1': 'float',
+                   'xmax_1': 'float',
+                   'ymin_1': 'float',
+                   'ymax_1': 'float',
+                   'image_id_2': 'str',
+                   'entity_2': 'str',
+                   'xmin_2': 'float',
+                   'xmax_2': 'float',
+                   'ymin_2': 'float',
+                   'ymax_2': 'float',
+                   'occlusion': 'int',
+                   'distance': 'int'})
+    else:
+        # Store Evaluation Outputs to a DataFrame
+        df = pd.DataFrame({'image_id_1': image_id_1_list,
+                           'entity_1': entity_1_list,
+                           'xmin_1': xmin_1_list,
+                           'xmax_1': xmax_1_list,
+                           'ymin_1': ymin_1_list,
+                           'ymax_1': ymax_1_list,
+                           'image_id_2': image_id_2_list,
+                           'entity_2': entity_2_list,
+                           'xmin_2': xmin_2_list,
+                           'xmax_2': xmax_2_list,
+                           'ymin_2': ymin_2_list,
+                           'ymax_2': ymax_2_list,
+                           'occlusion': occlusion_list,
+                           'distance': distance_list,
+                           'index': index_list
+                           })
+        # Make sure the data type for each column is correct
+        df.astype({'image_id_1': 'str',
+                   'entity_1': 'str',
+                   'xmin_1': 'float',
+                   'xmax_1': 'float',
+                   'ymin_1': 'float',
+                   'ymax_1': 'float',
+                   'image_id_2': 'str',
+                   'entity_2': 'str',
+                   'xmin_2': 'float',
+                   'xmax_2': 'float',
+                   'ymin_2': 'float',
+                   'ymax_2': 'float',
+                   'occlusion': 'int',
+                   'distance': 'int',
+                   'index': 'int'})
 
-    # Write DataFrame to file
-    file_name = args.output_name
-    if folder_name:
-        file_name = folder_name + '/' + file_name
-        if not os.path.exists(folder_name):
-            os.mkdir(folder_name)
-
-    file_name = file_name + '_' + valid_or_test + '_' + str(epoch-1) + '.csv'
+    # save dataframe to disk as a csv file
+    file_name = folder_name + '/' + file_name
+    file_name = file_name + '_' + valid_or_test + '_' + str(epoch - 1) + '.csv'
     print(file_name)
     df.to_csv(file_name, index=False)
-
-
 
