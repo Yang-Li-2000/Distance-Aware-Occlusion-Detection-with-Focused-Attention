@@ -506,9 +506,13 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
         occl_decoder_attention_path = folder_name + '/' + image_name + occl_decoder_attention_suffix
 
         # Write attention weights to disk
-        torch.save(temp_vars.attention_pair_decoder[-1], pair_decoder_attention_path)
-        torch.save(temp_vars.attention_distance_decoder[-1], dist_decoder_attention_path)
-        torch.save(temp_vars.attention_occlusion_decoder[-1], occl_decoder_attention_path)
+        if VISUALIZE_ATTENTION_WEIGHTS:
+            torch.save(temp_vars.attention_pair_decoder[-1],
+                       pair_decoder_attention_path)
+            torch.save(temp_vars.attention_distance_decoder[-1],
+                       dist_decoder_attention_path)
+            torch.save(temp_vars.attention_occlusion_decoder[-1],
+                       occl_decoder_attention_path)
 
         iteratoin_count += 1
 
