@@ -495,7 +495,8 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
                                                    index_list)
 
         # TODO: write attention weights to disk (Not implemented for batch_size > 1)
-        assert args.batch_size == 1
+        if VISUALIZE_ATTENTION_WEIGHTS:
+            assert args.batch_size == 1
         image_name = hoi_list[0]['image_id'][:-4]
         pair_decoder_attention_suffix = '_attention_pair_decoderr.pt'
         dist_decoder_attention_suffix = '_attention_dist_decoderr.pt'

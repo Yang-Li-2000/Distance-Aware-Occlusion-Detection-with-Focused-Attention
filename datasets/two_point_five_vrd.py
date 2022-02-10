@@ -533,9 +533,17 @@ class two_point_five_VRD(VisionDataset):
         ann = self.annotations[index]
         img_name = ann['image_id']
         target = ann['annotations']
-        img_path = './data/2.5vrd/images/' + self.image_folder_name + '/' + img_name
-        img = cv2.imread(img_path, cv2.IMREAD_COLOR)
-        img = Image.fromarray(img[:, :, ::-1]).convert('RGB')
+        if not CUSTOM_TSET_SET:
+            img_path = './data/2.5vrd/images/' + self.image_folder_name + '/' + img_name
+        else:
+            img_path = './data/2.5vrd/images/' + 'custom' + '/' + img_name
+
+        try:
+            img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+            img = Image.fromarray(img[:, :, ::-1]).convert('RGB')
+        except:
+            print(img_path)
+            raise NotImplementedError("Image not found")
 
         depth_name = img_name[:-3] + 'png'
         depth_path = './data/2.5vrd/depth/' + self.image_folder_name + '/' + depth_name

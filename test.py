@@ -149,6 +149,25 @@ def triplet_nms(hoi_list):
 
 
 def triplet_nms_for_vrd(hoi_list, nms_iou_human, nms_iou_object):
+    """
+    Filter out duplicate predictions.
+    Two predictions are considered duplicate if:
+    1) IoU of predicted object A boxes in two predictions > nms_iou_human,
+    AND
+    2) IoU of predicted object B boxes in two predictions > nms_iou_object,
+    AND
+    3) predicted object A categories in two predictions are the same,
+    AND
+    4) predicted object B categories in two predictions are the same,
+    AND
+    5) predicted object relative occlusions in two predictions are the same,
+    AND
+    6) predicted object relative distances in two predictions are the same.
+    :param hoi_list:
+    :param nms_iou_human:
+    :param nms_iou_object:
+    :return:
+    """
     hoi_list.sort(key=lambda x: x['h_cls'] * x['o_cls'] * x['i_cls'] * x['ocl_cls'],
                   reverse=True)
     mask = [True] * len(hoi_list)
