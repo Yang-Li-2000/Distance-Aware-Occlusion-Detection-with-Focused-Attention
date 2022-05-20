@@ -168,12 +168,19 @@ def main(args):
         start = args.resume.find('/')
         end = args.resume.rfind('/')
         folder_name = args.resume[start+1:end]
+
+        epoch_number_start_index = args.resume.find('epoch_')
+        epoch_number_end_index = args.resume.rfind('.pth')
+        epoch_number = args.resume[epoch_number_start_index+6:epoch_number_end_index]
+        if len(epoch_number) == 0:
+            epoch_number = None
+
         if len(folder_name) == 0:
             folder_name = None
 
         with torch.no_grad():
             generate_evaluation_outputs(args, 'test', model, criterion, data_loader_test, optimizer,
-                     device, epoch, args.clip_max_norm, folder_name=folder_name)
+                     device, epoch, args.clip_max_norm, folder_name=folder_name, epoch_number=epoch_number)
 
         break
 

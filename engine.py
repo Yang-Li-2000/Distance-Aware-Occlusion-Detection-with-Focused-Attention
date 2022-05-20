@@ -391,7 +391,7 @@ def validate(args, writer, valid_or_test, model: torch.nn.Module, criterion: tor
 
 def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, criterion: torch.nn.Module,
                     data_loader: Iterable, optimizer: torch.optim.Optimizer,
-                    device: torch.device, epoch: int, max_norm: float = 0, folder_name=None):
+                     device: torch.device, epoch: int, max_norm: float = 0, folder_name=None, epoch_number=None):
     """
     Generate predictions on the validation or test set. Results will be saved to
         a file named predictions_[valid_or_test]_[epoch_number].csv.
@@ -428,6 +428,8 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
     # Create folders to store results
     file_name = args.output_name
     attention_folder_name = 'attention'
+    if epoch_number is not None:
+        attention_folder_name = attention_folder_name + '_' + epoch_number
     if folder_name:
         if not os.path.exists(folder_name):
             os.mkdir(folder_name)
@@ -559,7 +561,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
                            'distance': distance_list,
                            })
         # Make sure the data type for each column is correct
-        df.astype({'image_id_1': 'str',
+        df = df.astype({'image_id_1': 'str',
                    'entity_1': 'str',
                    'xmin_1': 'float',
                    'xmax_1': 'float',
@@ -592,7 +594,7 @@ def generate_evaluation_outputs(args, valid_or_test, model: torch.nn.Module, cri
                            'index': index_list
                            })
         # Make sure the data type for each column is correct
-        df.astype({'image_id_1': 'str',
+        df = df.astype({'image_id_1': 'str',
                    'entity_1': 'str',
                    'xmin_1': 'float',
                    'xmax_1': 'float',
