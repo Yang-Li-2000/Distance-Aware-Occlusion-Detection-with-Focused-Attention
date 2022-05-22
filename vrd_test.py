@@ -93,6 +93,7 @@ def get_args_parser():
     parser.add_argument('--num_workers', default=0, type=int)
 
     parser.add_argument('--output_name', default='predictions', type=str)
+    parser.add_argument('--folder_name', default='', type=str)
 
     return parser
 
@@ -177,6 +178,9 @@ def main(args):
 
         if len(folder_name) == 0:
             folder_name = None
+
+        if len(args.folder_name) > 0:
+            folder_name = args.folder_name
 
         with torch.no_grad():
             generate_evaluation_outputs(args, 'test', model, criterion, data_loader_test, optimizer,
