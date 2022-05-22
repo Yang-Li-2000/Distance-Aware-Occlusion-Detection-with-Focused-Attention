@@ -1,143 +1,93 @@
-# HOI Transformer
-Code for CVPR 2021 accepted paper [End-to-End Human Object Interaction Detection with HOI Transformer](https://arxiv.org/abs/2103.04503).
-
-This method also won 2nd Place Award in HOI Challenge in [Person In Context](http://www.picdataset.com/challenge/leaderboard/pic2021) in CVPR Workshop 2021.
-
-<div align="center">
-  <img src="data/architecture.png" width="900px" />
-</div>
-
-
-## TODO list
-
-- [x] HICO-DET Code & DataSet
-- [x] V-COCO Code & DataSet
-- [x] HOI-A Code & DataSet
-- [x] HICO-DET [Res50](https://drive.google.com/file/d/1-WQnnTHB7f7X2NpqPVqIO6tvWN6k1Ot8/view?usp=sharing) Res101
-- [x] V-COCO Res50 [Res101](https://drive.google.com/file/d/1HZH3fUpiou2-f91_OvHnTX6feZNqxHa7/view?usp=sharing)
-- [x] HOI-A [Res50](https://drive.google.com/file/d/1bNrFQ6a8aKBzwWc0MAdG2f24StMP9lhY/view?usp=sharing) Res101
-- [ ] Swin-B Code
+# Distance-aware Occlusion Detection from Pair Proposals with Focused Attention
+Code for TODO
 
 
 ## Performance
-|Model|HICO-DET (Full/Rare/NonRare)|V-COCO|HOI-A|
-|---|---|---|---|
-|Res50|28.92/19.83/31.64|51.15|73.23|
+TODO
+
+## (TODO) Environment and Data
+conda activate yang_hoitr
 
 
-## Reproduction
+## Generate Predictions (on the test set)
 
-We recomend you to setup in the following steps:
+The argument --resume is the path of the model checkpoint to be evaluated. Evaluation out will be written to tensorboard. The experiment name is the name of the folder that is under output_dir and contains the checkpoint. For example, the sample evaluation script would result in an experiment name of "Dec28_Cascade_633".\
+Users need to modify dec_layers, dec_layers_distance, dec_layers_occlusion to the correct number of transformer decoder layers in the object pair decoder, distance decoder, and occlusion decoder, respectively. 
 
-1.Clone the repo.
-```
-git clone https://github.com/bbepoch/HoiTransformer.git
-```
+### 1. Evaluate model trained with the generalized intersection prediction task (GIT)
 
-2.Download the MS-COCO pretrained [DETR](https://github.com/facebookresearch/detr) model.
+Before running, in the unmodified magic_numbers.py, set:\
+**PREDICT_INTERSECTION_BOX = True**
 ```bash
-cd data/detr_coco && bash download_model.sh
+python vrd_test.py --backbone=resnet101 --resume='output_dir/Dec27_Cascade_633+Intersection/checkpoint_epoch_40.pth' --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --num_workers=0 --batch_size=1
 ```
 
-3.Download the annotation files for HICO-DET, V-COCO and HOI-A.
+
+### 2. Evaluate model trained without the generalized intersection prediction task (GIT)
+Before running, in the unmodified magic_numbers.py, make sure:\
+**PREDICT_INTERSECTION_BOX = False**
 ```bash
-cd data && bash download_annotations.sh
+python vrd_test.py --backbone=resnet101 --resume='output_dir/Dec28_Cascade_633/checkpoint_epoch_37.pth' --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --num_workers=0 --batch_size=1
 ```
 
-4.Download the image files for [HICO-DET](https://drive.google.com/open?id=1QZcJmGVlF9f4h-XLWe9Gkmnmj2z1gSnk), [V-COCO](https://cocodataset.org/#download) and [HOI-A](https://drive.google.com/drive/folders/15xrIt-biSmE9hEJ2W6lWlUmdDmhatjKt). Instead, we provide a [script](data/download_images.sh) to get all of them. A required directory structure is:
+After generating predictions, need to evaluate them and write evaluation outputs to tensorboard.
 
-        HoiTransformer/
-        ├── data/
-        │   ├── detr_coco/
-        │   ├── hico/
-        │   │   ├── eval/
-        │   │   └── images/
-        │   │       ├── train2015/
-        │   │       └── test2015/
-        │   ├── hoia/
-        │   │   ├── eval/
-        │   │   └── images/
-        │   │       ├── trainval/
-        │   │       └── test/
-        │   └── vcoco/
-        │       ├── eval/
-        │       └── images/
-        │           ├── train2014/
-        │           └── val2014/
-        ├── datasets/
-        ├── models/
-        ├── tools/
-        ├── util/
-        ├── engin.py
-        ├── main.py
-        └── test.py
+## (TODO) Evaluate Predictions (on the test set)
 
-5.OPTIONAL SETTINGS. When the above subdirectories in 'data' are all ready, you can train a model on any one of the three benchmarks. But before that, we highly recommend you to move the whole folder 'data' to another place on your computer, e.g. '/home/hoi/data', and only put a soft link named 'data' under 'HoiTransformer'.
+
+
+
+## Train
+The experiment_name, output_dir, dec_layers, dec_layers_distance, dec_layers_occlusion arguments can be changed.
+1. experiment_name: the experiment name in tensorboard.
+2. output_dir: the folder to store checkpoints.
+3. dec_layers, dec_layers_distance, dec_layers_occlusion corresponds to the number of transformer decoder layers in the object pair decoder, distance decoder, and occlusion decoder, respectively. 
+
+### 1. Train with the generalized intersection prediction task (GIT)
+Before running, in the unmodified magic_numbers.py, set:\
+**PREDICT_INTERSECTION_BOX = True**
+
 ```bash
-# Optional but recommended to separate data from code.
-mv data /home/hoi/
-ln -s /home/hoi/data data
+torchrun --nnodes=1 --nproc_per_node=8 --master_port=54321 main.py --num_workers=8 --epochs=500 --dataset_file=two_point_five_vrd --batch_size=6 --backbone=resnet101 --lr=0.0001  --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --experiment_name='runs/debug'  --output_dir='output_dir/debug' --lr_drop=30
 ```
 
-6.Train a model.
-```
-# Train on HICO-DET.
-python3 -m torch.distributed.launch --nproc_per_node=8 --use_env main.py --epochs=150 --lr_drop=110 --dataset_file=hico --batch_size=2 --backbone=resnet50
+### 2. Train without the generalized intersection prediction task (GIT)
+Before running, in the unmodified magic_numbers.py, make sure:\
+**PREDICT_INTERSECTION_BOX = False**
 
-# Train on HOI-A.
-python3 -m torch.distributed.launch --nproc_per_node=8 --use_env main.py --epochs=150 --lr_drop=110 --dataset_file=hoia --batch_size=2 --backbone=resnet50
-
-# Train on V-COCO.
-python3 -m torch.distributed.launch --nproc_per_node=8 --use_env main.py --epochs=150 --lr_drop=110 --dataset_file=vcoco --batch_size=2 --backbone=resnet50
-
-# Training longer can get even better performance.
+```bash
+torchrun --nnodes=1 --nproc_per_node=8 --master_port=54322 main.py --num_workers=8 --epochs=500 --dataset_file=two_point_five_vrd --batch_size=6 --backbone=resnet101 --lr=0.0001  --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --experiment_name='runs/debug'  --output_dir='output_dir/debug' --lr_drop=30
 ```
 
-7.Test a model.
-```
-python3 test.py --backbone=resnet50 --batch_size=1 --dataset_file=hico --log_dir=./ --model_path=your_model_path
-```
+## Visualize Attention Weights (on the test set)
 
-
-## Annotations
-
-We propose a new annotation format 'ODGT' which is much easier to understand, and we have provided annotation files for all the existing benchmarks, i.e. HICO-DET, HOI-A, V-COCO, so you don't have to know how to get it, just use it. The core structure of 'ODGT' format is:
+### 1. Save attention weights to disk
+Before running, in the unmodified magic_numbers.py, set:\
+**VISUALIZE_ATTENTION_WEIGHTS = True**\
+**PREDICT_INTERSECTION_BOX = True**
+```bash
+python vrd_test.py --backbone=resnet101 --resume='output_dir/Dec27_Cascade_633+Intersection/checkpoint_epoch_40.pth' --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --num_workers=0 --batch_size=1
 ```
-{
-    file_name: XXX.jpg,
-    width: image width,
-    height: image height,
-    gtboxes: [
-        {
-            box: [x, y, w, h],
-            tag: object category name,
-        },
-        ...
-    ],
-    hoi: [
-        {
-            subject_id: human box index in gtboxes,
-            object_id: object box index in gtboxes,
-            interaction: hoi category name,
-        },
-        ...
-    ],
-}
+Running this would save the attention weights of the model that was trained with the generalized intersection prediction task to disk.
+
+### 2. Save attention weights to disk
+Before running, in the unmodified magic_numbers.py, set:\
+**VISUALIZE_ATTENTION_WEIGHTS = True**
+```bash
+python vrd_test.py --backbone=resnet101 --resume='output_dir/Dec28_Cascade_633/checkpoint_epoch_37.pth' --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --num_workers=0 --batch_size=1
 ```
+Running this would save the attention weights of the model trained without the generalized intersection prediction task to disk.
+
+### 3. Visualize saved attention weights using jupyter notebooks
+(TODO) Use the a jupyter notebook provided by us to visualize attention weights saved to disk in the previous steps. 
 
 
 ## Citation
 
 ```
-@inproceedings{zou2021_hoitrans,
-  author = {Zou, Cheng and Wang, Bohan and Hu, Yue and Liu, Junqi and Wu, Qian and Zhao, Yu and Li, Boxun and Zhang, Chenguang and Zhang, Chi and Wei, Yichen and Sun, Jian},
-  title = {End-to-End Human Object Interaction Detection with HOI Transformer},
-  booktitle={CVPR},
-  year = {2021},
-}
+TODO
 ```
 
 
 ## Acknowledgement
-We sincerely thank all previous works, especially [DETR](https://github.com/facebookresearch/detr), [PPDM](https://github.com/YueLiao/PPDM), [iCAN](https://github.com/vt-vl-lab/iCAN), for some of the codes are built upon them.
-
+TODO
