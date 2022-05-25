@@ -9,12 +9,13 @@ TODO
 conda activate yang_hoitr
 
 
-## Generate Predictions (on the test set)
+## Evaluate (on the test set)
 
 The argument --resume is the path of the model checkpoint to be evaluated. Evaluation out will be written to tensorboard. The experiment name is the name of the folder that is under output_dir and contains the checkpoint. For example, the sample evaluation script would result in an experiment name of "Dec28_Cascade_633".\
 Users need to modify dec_layers, dec_layers_distance, dec_layers_occlusion to the correct number of transformer decoder layers in the object pair decoder, distance decoder, and occlusion decoder, respectively. 
 
-### 1. Evaluate model trained with the generalized intersection prediction task (GIT)
+### 1. Generate and Save Predictions
+#### a) model trained with the generalized intersection prediction task (GIT)
 
 Before running, in the unmodified magic_numbers.py, set:\
 **PREDICT_INTERSECTION_BOX = True**
@@ -23,7 +24,7 @@ python vrd_test.py --backbone=resnet101 --resume='output_dir/Dec27_Cascade_633+I
 ```
 
 
-### 2. Evaluate model trained without the generalized intersection prediction task (GIT)
+#### b) model trained without the generalized intersection prediction task (GIT)
 Before running, in the unmodified magic_numbers.py, make sure:\
 **PREDICT_INTERSECTION_BOX = False**
 ```bash
@@ -32,7 +33,8 @@ python vrd_test.py --backbone=resnet101 --resume='output_dir/Dec28_Cascade_633/c
 
 After generating predictions, need to evaluate them and write evaluation outputs to tensorboard.
 
-## (TODO) Evaluate Predictions (on the test set)
+### 2. (TODO) Evaluate using saved predictions 
+go to ../google... and run the python file named write_....._to_tensorboard.py
 
 
 
@@ -62,6 +64,7 @@ torchrun --nnodes=1 --nproc_per_node=8 --master_port=54322 main.py --num_workers
 ## Visualize Attention Weights (on the test set)
 
 ### 1. Save attention weights to disk
+#### a) Model trained with the GIT
 Before running, in the unmodified magic_numbers.py, set:\
 **VISUALIZE_ATTENTION_WEIGHTS = True**\
 **PREDICT_INTERSECTION_BOX = True**
@@ -70,7 +73,7 @@ python vrd_test.py --backbone=resnet101 --resume='output_dir/Dec27_Cascade_633+I
 ```
 Running this would save the attention weights of the model that was trained with the generalized intersection prediction task to disk.
 
-### 2. Save attention weights to disk
+#### b) model trained without the GIT
 Before running, in the unmodified magic_numbers.py, set:\
 **VISUALIZE_ATTENTION_WEIGHTS = True**
 ```bash
@@ -78,9 +81,12 @@ python vrd_test.py --backbone=resnet101 --resume='output_dir/Dec28_Cascade_633/c
 ```
 Running this would save the attention weights of the model trained without the generalized intersection prediction task to disk.
 
-### 3. Visualize saved attention weights using jupyter notebooks
+### 2. Visualize saved attention weights using jupyter notebooks
 (TODO) Use the a jupyter notebook provided by us to visualize attention weights saved to disk in the previous steps. 
 
+Copy and use these two notebooks:\
+70: /DATA1/liyang/HoiTransformer/visualize_attention_intersection.ipynb\
+70: /DATA1/liyang/HoiTransformer/visualize_attention.ipynb
 
 ## Citation
 
