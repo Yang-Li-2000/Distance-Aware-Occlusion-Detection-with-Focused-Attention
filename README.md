@@ -64,6 +64,9 @@ torchrun --nnodes=1 --nproc_per_node=8 --master_port=54322 main.py --num_workers
 ## Visualize Attention Weights (on the test set)
 
 ### 1. Save attention weights to disk
+Firstly, set **SORT_USING_OBJECT_SCORES = True** in magic_numbers.py
+
+
 #### a) Model trained with the GIT
 Before running, in the unmodified magic_numbers.py, set:\
 **VISUALIZE_ATTENTION_WEIGHTS = True**\
