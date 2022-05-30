@@ -508,6 +508,12 @@ class SetCriterion(nn.Module):
             intersection_target_boxes = torch.cat(
                 [t['intersection_boxes'][i] for t, (_, i) in zip(targets, indices)],
                 dim=0)
+            # print()
+            # print(intersection_src_boxes)
+            # print()
+            # print(intersection_target_boxes)
+            # print()
+            # breakpoint()
             intersection_loss_bbox = F.l1_loss(intersection_src_boxes, intersection_target_boxes,
                                     reduction='none')
 

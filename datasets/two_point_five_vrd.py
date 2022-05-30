@@ -481,7 +481,7 @@ def make_hico_transforms(image_set, test_scale=-1):
         ToTensor(),
         Normalize(mean, std, depth_mean, depth_std),
     ])
-    if image_set == 'train':
+    if image_set == 'train' and not DEACTIVATE_EXTRA_TRANSFORMS:
         if not GPU_MEMORY_PRESSURE_TEST:
             return Compose([
                 RandomHorizontalFlip(),
@@ -505,7 +505,7 @@ def make_hico_transforms(image_set, test_scale=-1):
                 ),
                 normalize,
             ])
-    if image_set == 'test' or image_set == 'valid':
+    if image_set == 'test' or image_set == 'valid' or DEACTIVATE_EXTRA_TRANSFORMS:
         if test_scale == -1:
             return Compose([
                 normalize,
@@ -559,6 +559,8 @@ class two_point_five_VRD(VisionDataset):
             img.save('temp/' + img_name[:-4] + '_img.png')
             depth.save('temp/' + img_name[:-4] + '_depth.png')
 
+        # before transform, boxes are in xyxy
+        # after transform (nomalize), boxes are in cxcywh
         if self.transforms is not None:
             img, depth, target = self.transforms(img, depth, target)
 
@@ -588,10 +590,11 @@ class two_point_five_VRD(VisionDataset):
         num_bounding_boxes_in_ground_truth = target['num_bounding_boxes_in_ground_truth']
 
         # Compute interaction boxes
-        xmin = torch.max(human_boxes[:, 0], object_boxes[:, 0])
-        ymin = torch.max(human_boxes[:, 1], object_boxes[:, 1])
-        xmax = torch.min(human_boxes[:, 0] + human_boxes[:, 2], object_boxes[:, 0] + object_boxes[:, 2])
-        ymax = torch.min(human_boxes[:, 1] + human_boxes[:, 3], object_boxes[:, 1] + object_boxes[:, 3])
+        # (human boxes and object boxes are in the cxcywh format)
+        xmin = torch.max(human_boxes[:, 0] - human_boxes[:, 2] / 2, object_boxes[:, 0] - object_boxes[:, 2] / 2)
+        ymin = torch.max(human_boxes[:, 1] - human_boxes[:, 3] / 2, object_boxes[:, 1] - object_boxes[:, 3] / 2)
+        xmax = torch.min(human_boxes[:, 0] + human_boxes[:, 2] / 2, object_boxes[:, 0] + object_boxes[:, 2] / 2)
+        ymax = torch.min(human_boxes[:, 1] + human_boxes[:, 3] / 2, object_boxes[:, 1] + object_boxes[:, 3] / 2)
         # address negative width and height by swapping min and max
         xmin_adjusted = torch.min(xmin, xmax)
         xmax_adjusted = torch.max(xmin, xmax)
@@ -599,7 +602,14 @@ class two_point_five_VRD(VisionDataset):
         ymax_adjusted = torch.max(ymin, ymax)
         w = xmax_adjusted - xmin_adjusted
         h = ymax_adjusted - ymin_adjusted
-        intersection_boxes = torch.vstack([xmin_adjusted, ymin_adjusted, w, h]).T
+        cx = (xmin_adjusted + xmax_adjusted) / 2
+        cy = (ymin_adjusted + ymax_adjusted) / 2
+        if RANDOMLY_SHIFT_GT_INTERSECTION_BOXES:
+            random_noise_scale_x, random_noise_scale_y = np.random.normal(loc=RAND_INTER_LOC, scale=RAND_INTER_SCALE, size=2)
+            cx += w * random_noise_scale_x
+            cy += h * random_noise_scale_y
+        # this intersection box should also be in the cxcywh format
+        intersection_boxes = torch.vstack([cx, cy, w, h]).T
 
 
         image_id = np.array(image_id)

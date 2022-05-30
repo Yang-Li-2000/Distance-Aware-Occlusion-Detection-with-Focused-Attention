@@ -1,6 +1,8 @@
 sharing_strategy = "file_descriptor"
 #sharing_strategy = "file_system"
 
+DEACTIVATE_EXTRA_TRANSFORMS = False
+
 # Train on a specific image specified by the index of that image
 TRAIN_ON_ONE_IMAGE = False
 index_of_that_image = 2
@@ -83,9 +85,13 @@ CASCADE = True
 USE_DEPTH_DURING_TRAINING = False
 USE_DEPTH_DURING_INFERENCE = False
 # Predict Intersection Box
-PREDICT_INTERSECTION_BOX = False
+PREDICT_INTERSECTION_BOX = True
 # Use raw labels as targets
 USE_RAW_DISTANCE_LABELS = False
 USE_RAW_OCCLUSION_LABELS = False
 
 IMPROVE_INTERMEDIATE_LAYERS = False
+
+RANDOMLY_SHIFT_GT_INTERSECTION_BOXES = True
+RAND_INTER_LOC = 0
+RAND_INTER_SCALE = 0.3
