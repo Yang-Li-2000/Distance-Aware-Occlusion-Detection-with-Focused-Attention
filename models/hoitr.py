@@ -508,20 +508,27 @@ class SetCriterion(nn.Module):
             intersection_target_boxes = torch.cat(
                 [t['intersection_boxes'][i] for t, (_, i) in zip(targets, indices)],
                 dim=0)
-            # print()
-            # print(intersection_src_boxes)
-            # print()
-            # print(intersection_target_boxes)
-            # print()
-            # breakpoint()
             intersection_loss_bbox = F.l1_loss(intersection_src_boxes, intersection_target_boxes,
                                     reduction='none')
+        # determine whether to back-prop intersection losses
+        # if DO_NOT_PREDICT_INTERSECTION_BOX_IF_NO_INTERSECTION is set to True,
+        # gt intersection boxes would have -1 (<0) w and h when not intersection exists.
+        # In this situation, do not back-prop losses for
+        # intersection boxes (by setting them to zeros)
+        num_boxes_intersection = num_boxes
+        if DO_NOT_PREDICT_INTERSECTION_BOX_IF_NO_INTERSECTION:
+            gt_has_intersections = (intersection_target_boxes[:,-2] > 0) * (intersection_target_boxes[:,-1] > 0)
+            num_boxes_intersection = gt_has_intersections.sum().item()
+            num_boxes_intersection = max(num_boxes_intersection, 1)
+            gt_has_intersections = gt_has_intersections.unsqueeze(1).repeat(1, 4)
+            intersection_loss_bbox = intersection_loss_bbox * gt_has_intersections
+
 
         losses = dict()
         losses['human_loss_bbox'] = human_loss_bbox.sum() / num_boxes
         losses['object_loss_bbox'] = object_loss_bbox.sum() / num_boxes
         if PREDICT_INTERSECTION_BOX:
-            losses['intersection_loss_bbox'] = intersection_loss_bbox.sum() / num_boxes
+            losses['intersection_loss_bbox'] = intersection_loss_bbox.sum() / num_boxes_intersection
             losses['loss_bbox'] = losses['human_loss_bbox'] + losses[
                 'object_loss_bbox'] + losses['intersection_loss_bbox']
         else:
@@ -539,11 +546,17 @@ class SetCriterion(nn.Module):
                 box_ops.box_cxcywh_to_xyxy(intersection_src_boxes),
                 box_ops.box_cxcywh_to_xyxy(intersection_target_boxes)))
 
+        # do not back-prop losses (by setting losses to zeros) when
+        # there is no intersection in gt boxes when
+        # DO_NOT_PREDICT_INTERSECTION_BOX_IF_NO_INTERSECTION is set to True
+        if DO_NOT_PREDICT_INTERSECTION_BOX_IF_NO_INTERSECTION:
+            intersection_loss_giou = intersection_loss_giou * gt_has_intersections[:,0]
+
         losses['human_loss_giou'] = human_loss_giou.sum() / num_boxes
         losses['object_loss_giou'] = object_loss_giou.sum() / num_boxes
 
         if PREDICT_INTERSECTION_BOX:
-            losses['intersection_loss_giou'] = intersection_loss_giou.sum() / num_boxes
+            losses['intersection_loss_giou'] = intersection_loss_giou.sum() / num_boxes_intersection
             losses['loss_giou'] = losses['human_loss_giou'] + losses[
                 'object_loss_giou'] + losses['intersection_loss_giou']
         else:

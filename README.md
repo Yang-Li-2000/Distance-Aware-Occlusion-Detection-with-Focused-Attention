@@ -91,6 +91,12 @@ Copy and use these two notebooks:\
 70: /DATA1/liyang/HoiTransformer/visualize_attention_intersection.ipynb\
 70: /DATA1/liyang/HoiTransformer/visualize_attention.ipynb
 
+## Debug
+```bash
+CUDA_VISIBLE_DEVICES=0 python -m pdb main.py --num_workers=0 --epochs=500 --dataset_file=two_point_five_vrd --batch_size=6 --backbone=resnet101 --lr=0.0001  --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --experiment_name='runs/debug'  --output_dir='output_dir/debug' --lr_drop=30
+```
+
+
 ## Citation
 
 ```

@@ -608,6 +608,13 @@ class two_point_five_VRD(VisionDataset):
             random_noise_scale_x, random_noise_scale_y = np.random.normal(loc=RAND_INTER_LOC, scale=RAND_INTER_SCALE, size=2)
             cx += w * random_noise_scale_x
             cy += h * random_noise_scale_y
+        # If no intersection exists, set w and h to -1.
+        # Losses for intersection box will not be back-proped if
+        # w or h is -1 (<0).
+        if DO_NOT_PREDICT_INTERSECTION_BOX_IF_NO_INTERSECTION:
+            if (xmin > xmax).any() or (ymin > ymax).any():
+                w = w * 0 - 1
+                h = h * 0 - 1
         # this intersection box should also be in the cxcywh format
         intersection_boxes = torch.vstack([cx, cy, w, h]).T
 
