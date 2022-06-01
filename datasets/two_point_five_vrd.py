@@ -604,10 +604,19 @@ class two_point_five_VRD(VisionDataset):
         h = ymax_adjusted - ymin_adjusted
         cx = (xmin_adjusted + xmax_adjusted) / 2
         cy = (ymin_adjusted + ymax_adjusted) / 2
+        # Randomly shift the location (center) of the ground truth intersection box
         if RANDOMLY_SHIFT_GT_INTERSECTION_BOXES:
             random_noise_scale_x, random_noise_scale_y = np.random.normal(loc=RAND_INTER_LOC, scale=RAND_INTER_SCALE, size=2)
             cx += w * random_noise_scale_x
             cy += h * random_noise_scale_y
+        # Randomly adjust the size of the ground truth intersection box
+        if RANDOMLY_ADJUST_SIZES_OF_GT_INTERSECTION_BOXES:
+            random_size_scale_x, random_size_scale_y = np.random.normal(loc=RAND_INTER_SIZE_LOC, scale=RAND_INTER_SIZE_SCALE, size=2)
+            w += w * random_size_scale_x
+            h += h * random_size_scale_y
+            # make sure the adjusted width and height are greater than zero
+            w = torch.max(0.00001 * torch.tensor(w.shape, device=w.device), w)
+            h = torch.max(0.00001 * torch.tensor(h.shape, device=h.device), h)
         # If no intersection exists, set w and h to -1.
         # Losses for intersection box will not be back-proped if
         # w or h is -1 (<0).
