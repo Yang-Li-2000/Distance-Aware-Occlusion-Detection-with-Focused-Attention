@@ -34,7 +34,7 @@ python vrd_test.py --backbone=resnet101 --resume='output_dir/Dec28_Cascade_633/c
 After generating predictions, need to evaluate them and write evaluation outputs to tensorboard.
 
 ### 2. (TODO) Evaluate using saved predictions 
-go to ../google... and run the python file named write_....._to_tensorboard.py
+go to ../temp_eval_for_hoitr and run the python file named write_to_tensorboard.py
 
 
 
