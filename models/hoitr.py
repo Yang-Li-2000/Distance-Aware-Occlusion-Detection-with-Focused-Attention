@@ -162,7 +162,7 @@ class HoiTR(nn.Module):
         # [1/3] Output object classes
         human_outputs_class = self.human_cls_embed(hs)
         object_outputs_class = self.object_cls_embed(hs)
-        # [3/3] Output object boxes
+        # [2/3] Output object boxes
         if IMPROVE_INTERMEDIATE_LAYERS:
             human_outputs_coord = human_outputs_coord.permute(0, 2, 1, 3)
             object_outputs_coord = object_outputs_coord.permute(0, 2, 1, 3)
