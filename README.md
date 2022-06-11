@@ -50,7 +50,10 @@ Before running, in the unmodified magic_numbers.py, set:\
 **PREDICT_INTERSECTION_BOX = True**
 
 ```bash
+# 8 GPUs (40G GPU memory)
 torchrun --nnodes=1 --nproc_per_node=8 --master_port=54321 main.py --num_workers=8 --epochs=500 --dataset_file=two_point_five_vrd --batch_size=6 --backbone=resnet101 --lr=0.0001  --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --experiment_name='runs/debug'  --output_dir='output_dir/debug' --lr_drop=30
+# 4 GPUs (80G GPU memory)
+torchrun --nnodes=1 --nproc_per_node=4 --master_port=54321 main.py --num_workers=4 --epochs=500 --dataset_file=two_point_five_vrd --batch_size=12 --backbone=resnet101 --lr=0.0001  --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --experiment_name='runs/debug'  --output_dir='output_dir/debug' --lr_drop=30
 ```
 
 ### 2. Train without the generalized intersection prediction task (GIT)
@@ -58,8 +61,20 @@ Before running, in the unmodified magic_numbers.py, make sure:\
 **PREDICT_INTERSECTION_BOX = False**
 
 ```bash
+# 8 GPUs (40G GPU memory)
 torchrun --nnodes=1 --nproc_per_node=8 --master_port=54322 main.py --num_workers=8 --epochs=500 --dataset_file=two_point_five_vrd --batch_size=6 --backbone=resnet101 --lr=0.0001  --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --experiment_name='runs/debug'  --output_dir='output_dir/debug' --lr_drop=30
+# 4 GPUs (80G GPU memory)
+torchrun --nnodes=1 --nproc_per_node=4 --master_port=54322 main.py --num_workers=4 --epochs=500 --dataset_file=two_point_five_vrd --batch_size=12 --backbone=resnet101 --lr=0.0001  --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --experiment_name='runs/debug'  --output_dir='output_dir/debug' --lr_drop=30
 ```
+
+### 3. Use a single decoder for all tasks
+```bash
+# 8 GPUs (40G GPU memory)
+TODO
+# 4 GPUs (80G GPU memory)
+torchrun --nnodes=1 --nproc_per_node=4 --master_port=54323 main.py --num_workers=4 --epochs=500 --dataset_file=two_point_five_vrd --batch_size=12 --backbone=resnet101 --lr=0.0001  --dec_layers=6 --experiment_name='runs/debug'  --output_dir='output_dir/debug' --lr_drop=30
+```
+
 
 ## Visualize Attention Weights (on the test set)
 
@@ -95,7 +110,12 @@ Copy and use these two notebooks:\
 ```bash
 CUDA_VISIBLE_DEVICES=0 python -m pdb main.py --num_workers=0 --epochs=500 --dataset_file=two_point_five_vrd --batch_size=6 --backbone=resnet101 --lr=0.0001  --dec_layers=6 --dec_layers_distance=3 --dec_layers_occlusion=3 --experiment_name='runs/debug'  --output_dir='output_dir/debug' --lr_drop=30
 ```
-
+## Slurm
+```bash
+ srun --gres=gpu:a100-80G:4 --time=7-00:00:00 --mem=420000 --cpus-per-task=100 --qos=normal --pty screen
+ srun --gres=gpu:a100-80G:4 --time=4-00:00:00 --mem=420000 --cpus-per-task=100 --qos=normal --pty screen
+ srun --gres=gpu:a100-80G:4 --time=1-00:00:00 --mem=420000 --cpus-per-task=100 --qos=normal --pty screen
+```
 
 ## Citation
 
