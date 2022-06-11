@@ -11,6 +11,7 @@ Modules to compute the matching cost and solve the corresponding LSAP.
 import torch
 from scipy.optimize import linear_sum_assignment
 from torch import nn
+from magic_numbers import *
 
 from util.box_ops import box_cxcywh_to_xyxy, generalized_box_iou
 
@@ -105,7 +106,7 @@ class HungarianMatcher(nn.Module):
         l_box_o = self.cost_bbox * object_cost_bbox + self.cost_giou * object_cost_giou
         l_cls_all = (l_cls_h + l_cls_o + l_cls_r + l_cls_occlusion) / (alpha_h + alpha_o + alpha_r + alpha_r)
 
-        if "intersection_pred_boxes" in outputs:
+        if (not DO_NOT_PREDICT_INTERSECTION_BOX_IF_NO_INTERSECTION) and ("intersection_pred_boxes" in outputs):
             intersection_out_bbox = outputs["intersection_pred_boxes"].flatten(0, 1)  # [bs * num_queries, 4]
             intersection_tgt_box = torch.cat([v["intersection_boxes"] for v in targets])
             intersection_cost_bbox = torch.cdist(intersection_out_bbox, intersection_tgt_box, p=1)
