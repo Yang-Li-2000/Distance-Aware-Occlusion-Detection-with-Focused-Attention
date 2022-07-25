@@ -131,7 +131,7 @@ Running this would save the attention weights of the model trained without the g
 Use a jupyter notebook provided by us to visualize attention weights saved to disk in the previous steps. 
 
 Place this notebooks under project root and follow the instructions in it to visualize decoder attentions:\
-[cleaned_visualize_attention_(GIT).ipynb]()
+[cleaned_visualize_attention_(GIT).ipynb](https://www.icloud.com.cn/iclouddrive/0c2Db_2Pircyf4niGTIPBjqRg#cleaned_visualize_attention_(GIT))
 
 
 ## Debug
