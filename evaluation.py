@@ -1,3 +1,9 @@
+# ------------------------------------------------------------------------
+# Licensed under the Apache License, Version 2.0 (the "License")
+# ------------------------------------------------------------------------
+# Copyright (c) Yang Li and Yucheng Tu. All Rights Reserved
+# ------------------------------------------------------------------------
+
 from engine import *
 from datasets.two_point_five_vrd import *
 from util.box_ops import box_cxcywh_to_xyxy

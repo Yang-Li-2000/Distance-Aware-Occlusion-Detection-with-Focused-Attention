@@ -1,4 +1,9 @@
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# ------------------------------------------------------------------------
+# Licensed under the Apache License, Version 2.0 (the "License")
+# ------------------------------------------------------------------------
+# Modified from HoiTransformer (https://github.com/bbepoch/HoiTransformer)
+# Copyright (c) Yang Li and Yucheng Tu. All Rights Reserved
+# ------------------------------------------------------------------------
 """
 DETR Transformer class.
 

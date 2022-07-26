@@ -1,3 +1,10 @@
+# ------------------------------------------------------------------------
+# Licensed under the Apache License, Version 2.0 (the "License")
+# ------------------------------------------------------------------------
+# Modified from HoiTransformer (https://github.com/bbepoch/HoiTransformer)
+# Copyright (c) Yang Li and Yucheng Tu. All Rights Reserved
+# ------------------------------------------------------------------------
+
 from test import *
 from magic_numbers import *
 from datasets.two_point_five_vrd import *

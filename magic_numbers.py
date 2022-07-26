@@ -1,3 +1,9 @@
+# ------------------------------------------------------------------------
+# Licensed under the Apache License, Version 2.0 (the "License")
+# ------------------------------------------------------------------------
+# Copyright (c) Yang Li and Yucheng Tu. All Rights Reserved
+# ------------------------------------------------------------------------
+
 sharing_strategy = "file_descriptor"
 #sharing_strategy = "file_system"
 

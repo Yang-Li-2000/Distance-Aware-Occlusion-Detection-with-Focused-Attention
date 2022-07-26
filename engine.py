@@ -1,8 +1,8 @@
 # ------------------------------------------------------------------------
 # Licensed under the Apache License, Version 2.0 (the "License")
 # ------------------------------------------------------------------------
-# Modified from DETR (https://github.com/facebookresearch/detr)
-# Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
+# Modified from HoiTransformer (https://github.com/bbepoch/HoiTransformer)
+# Copyright (c) Yang Li and Yucheng Tu. All Rights Reserved
 # ------------------------------------------------------------------------
 
 """
