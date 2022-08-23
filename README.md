@@ -1,5 +1,5 @@
 # Distance-aware Occlusion Detection with Focused Attention
-Code for Distance-Aware Occlusion Detection with Focused Attention
+Code for [Distance-Aware Occlusion Detection with Focused Attention](https://ieeexplore.ieee.org/document/9864137)
 
 
 ## Environment and Data
@@ -142,5 +142,5 @@ CUDA_VISIBLE_DEVICES=0 python -m pdb main.py --num_workers=0 --epochs=500 --data
 ## Citation
 
 ```
-TODO
+@ARTICLE{9864137,  author={Li, Yang and Tu, Yucheng and Chen, Xiaoxue and Zhao, Hao and Zhou, Guyue},  journal={IEEE Transactions on Image Processing},   title={Distance-Aware Occlusion Detection with Focused Attention},   year={2022},  volume={},  number={},  pages={1-1},  doi={10.1109/TIP.2022.3197984}}
 ```
